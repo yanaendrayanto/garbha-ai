@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>GARBHA MODE - Topeng Inferno</title>
+  <title>GARBHA INFERNO + TOPENG REALTIME</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
   <style>
@@ -19,31 +19,96 @@ const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
-let lastFrame = {};
-let lastMoveTime = 0;
-let isPlaying = false;
+// ================= CAMERA =================
+async function setupCamera(){
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{width:640,height:480,facingMode:"user"}
+  });
+  video.srcObject = stream;
+  return new Promise(r=>video.onloadeddata=r);
+}
 
 // ================= AUDIO =================
 const garbha = new Audio("garbha.mp3");
 garbha.loop = true;
 let firstClick = false;
-window.addEventListener('click', ()=>{
+let isPlaying = false;
+let lastMoveTime = 0;
+
+window.addEventListener('click', async ()=>{
   if(firstClick) return;
   firstClick = true;
-  garbha.play().catch(e=>console.log("Audio play error:", e));
+  try{
+    await garbha.play();
+    garbha.pause();
+  }catch(e){console.log(e);}
 });
 
-// ================= MASK =================
-const maskImg = new Image();
-maskImg.src = "panji.png"; // topeng wajah
+// ================= PARTICLE SYSTEM =================
+class Particle {
+  constructor(x,y,type){
+    this.x = x;
+    this.y = y;
+    this.vx = (Math.random()-0.5)*0.5;
+    this.vy = (type==="fire"?-Math.random()*2:-Math.random()*0.3);
+    this.life = 1;
+    this.size = type==="fire"?Math.random()*6+4:Math.random()*8+4;
+    this.type = type;
+  }
+  update(){ 
+    this.x += this.vx; 
+    this.y += this.vy; 
+    this.life -= 0.01;
+  }
+  draw(ctx){
+    ctx.globalAlpha = this.life;
+    if(this.type==="fire"){
+      const grd = ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.size);
+      grd.addColorStop(0,"rgba(255,150,0,0.8)");
+      grd.addColorStop(0.5,"rgba(255,50,0,0.5)");
+      grd.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.fillStyle = grd;
+    } else {
+      ctx.fillStyle = "rgba(150,150,150,0.2)";
+    }
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,this.size,0,Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
 
-// ================= CAMERA =================
-async function setupCamera(){
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video:{width:1280,height:720,facingMode:"user"}
-  });
-  video.srcObject = stream;
-  return new Promise(r=>video.onloadeddata=r);
+let particles = [];
+let lastFrame = {};
+let detector;
+
+// ================= TOPENG REALTIME =================
+function drawMask(keypoints){
+  // ambil titik mata, hidung, mulut
+  const leftEye = keypoints.find(k=>k.name==="left_eye");
+  const rightEye = keypoints.find(k=>k.name==="right_eye");
+  const nose = keypoints.find(k=>k.name==="nose");
+  const mouth = keypoints.find(k=>k.name==="mouth");
+
+  if(leftEye && rightEye && nose && mouth){
+    const width = Math.abs(rightEye.x-leftEye.x)*2;
+    const height = Math.abs(mouth.y-nose.y)*2;
+
+    const centerX = (leftEye.x+rightEye.x)/2;
+    const centerY = (nose.y+mouth.y)/2;
+
+    // gambar topeng
+    ctx.save();
+    ctx.translate(centerX,centerY);
+    ctx.fillStyle = "rgba(50,50,50,0.7)";
+    ctx.strokeStyle = "orange";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(0,0,width,height,0,0,2*Math.PI);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 // ================= MOTION =================
@@ -52,59 +117,13 @@ function getSpeed(prev,curr){
   return Math.hypot(curr.x-prev.x, curr.y-prev.y);
 }
 
-// ================= PARTICLE =================
-let particles = [];
-function addFire(x,y){
-  particles.push({
-    x, y,
-    vx: (Math.random()-0.5)*1,
-    vy: -Math.random()*2-0.5,
-    size: Math.random()*8+4,
-    life:1
-  });
-}
-function addSmoke(x,y){
-  particles.push({
-    x, y,
-    vx: (Math.random()-0.3, Math.random()*0.3),
-    vy: -Math.random()*1.5-0.5,
-    size: Math.random()*15+5,
-    life: 1,
-    type: "smoke"
-  });
-}
-function drawParticles(){
-  ctx.globalAlpha = 1;
-  particles.forEach(p=>{
-    if(p.type==="smoke"){
-      ctx.fillStyle = `rgba(100,100,100,${p.life*0.4})`;
-      ctx.beginPath();
-      ctx.ellipse(p.x,p.y,p.size,p.size*0.6,0,0,2*Math.PI);
-      ctx.fill();
-    } else {
-      const gradient = ctx.createRadialGradient(p.x,p.y,p.size*0.1,p.x,p.y,p.size);
-      gradient.addColorStop(0,"rgba(255,255,100,1)");
-      gradient.addColorStop(0.5,"rgba(255,100,0,0.7)");
-      gradient.addColorStop(1,"rgba(100,0,0,0)");
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(p.x,p.y,p.size,0,2*Math.PI);
-      ctx.fill();
-    }
-    p.x += p.vx;
-    p.y += p.vy;
-    p.life -= 0.01;
-  });
-  particles = particles.filter(p=>p.life>0);
-}
-
 // ================= MAIN =================
 async function main(){
   await setupCamera();
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
 
-  const detector = await poseDetection.createDetector(
+  detector = await poseDetection.createDetector(
     poseDetection.SupportedModels.MoveNet,
     {modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING}
   );
@@ -115,35 +134,37 @@ async function main(){
 
     const poses = await detector.estimatePoses(video);
     let detectedMovement = false;
-    poses.forEach(pose=>{
-      pose.keypoints.forEach(k=>{
-        if(k.score>0.4){
-          const speed = getSpeed(lastFrame[k.name], k);
-          lastFrame[k.name] = k;
-          if(speed>6) detectedMovement = true;
+    let totalSpeed = 0;
+    let count = 0;
 
-          // Tambah api & asap hanya di tubuh, tangan, kaki (hindari kepala)
-          if(!["nose","left_eye","right_eye","left_ear","right_ear","left_mouth","right_mouth"].includes(k.name)){
-            addFire(k.x,k.y);
-            addSmoke(k.x,k.y);
+    poses.forEach(pose=>{
+      const keypoints = pose.keypoints;
+      // spawn particles hanya di tubuh (hindari muka)
+      keypoints.forEach(k=>{
+        if(k.score>0.4){
+          const speed = lastFrame[k.name]?Math.hypot(k.x-lastFrame[k.name].x,k.y-lastFrame[k.name].y):0;
+          if(speed>1) detectedMovement = true;
+          totalSpeed += speed;
+          count++;
+          lastFrame[k.name] = k;
+
+          // api & asap
+          if(!["nose","left_eye","right_eye","mouth"].includes(k.name)){
+            for(let i=0;i<2;i++){
+              particles.push(new Particle(k.x,k.y,"fire"));
+              particles.push(new Particle(k.x,k.y,"smoke"));
+            }
           }
         }
       });
+
+      // draw mask di wajah
+      drawMask(keypoints);
     });
 
-    // Gambar topeng di wajah
-    poses.forEach(pose=>{
-      const nose = pose.keypoints.find(k=>k.name==="nose");
-      if(nose && nose.score>0.4){
-        const leftEye = pose.keypoints.find(k=>k.name==="left_eye");
-        const rightEye = pose.keypoints.find(k=>k.name==="right_eye");
-        const width = Math.abs(rightEye.x-leftEye.x)*2;
-        const height = width * maskImg.height/maskImg.width;
-        ctx.drawImage(maskImg, nose.x-width/2, nose.y-height/2, width, height);
-      }
-    });
+    const avgSpeed = count>0 ? totalSpeed/count : 0;
 
-    // Audio logic
+    // audio
     if(detectedMovement && firstClick){
       lastMoveTime = Date.now();
       if(!isPlaying){
@@ -152,14 +173,17 @@ async function main(){
       }
     }
     if(isPlaying){
-      garbha.playbackRate = Math.min(2, Math.max(1, 1 + detectedMovement?0.5:0));
+      garbha.playbackRate = Math.min(2,1+avgSpeed/5);
     }
-    if(isPlaying && Date.now() - lastMoveTime > 800){
+    if(isPlaying && Date.now()-lastMoveTime>800){
       garbha.pause();
       isPlaying = false;
     }
 
-    drawParticles();
+    // update particles
+    particles.forEach(p=>{p.update(); p.draw(ctx);});
+    particles = particles.filter(p=>p.life>0);
+
     requestAnimationFrame(draw);
   }
 
@@ -168,5 +192,6 @@ async function main(){
 
 main();
 </script>
+
 </body>
 </html>
