@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>GARBHA MODE - Fire & Smoke AI Dance</title>
+  <title>GARBHA MODE - Tubuh Api & Asap</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
   <style>
@@ -55,25 +55,29 @@ function getSpeed(prev,curr){
 // ================= PARTICLE & TRAIL =================
 function addParticles(x,y){
   // 🔥 Fire particle
-  particles.push({
-    x, y,
-    vx:(Math.random()-0.5)*1,
-    vy:(Math.random()*-2)-0.5,
-    size: Math.random()*6+4,
-    life:1,
-    type:"fire",
-    colors:["rgba(255,255,0,0.8)","rgba(255,165,0,0.6)","rgba(255,0,0,0.4)"]
-  });
+  for(let i=0;i<2;i++){ // lebih banyak api
+    particles.push({
+      x, y,
+      vx:(Math.random()-0.5)*1.5,
+      vy:(Math.random()*-3)-0.5,
+      size: Math.random()*6+4,
+      life:1,
+      type:"fire",
+      colors:["rgba(255,255,0,0.8)","rgba(255,140,0,0.6)","rgba(255,0,0,0.4)"]
+    });
+  }
   // 💨 Smoke particle
-  particles.push({
-    x, y,
-    vx:(Math.random()-0.3)*0.5,
-    vy:(Math.random()*-1.2)-0.2,
-    size: Math.random()*8+6,
-    life:1,
-    type:"smoke",
-    colors:["rgba(0,200,255,0.2)","rgba(0,150,255,0.15)","rgba(0,100,255,0.1)"]
-  });
+  for(let i=0;i<1;i++){
+    particles.push({
+      x, y,
+      vx:(Math.random()-0.5)*0.5,
+      vy:(Math.random()*-2)-0.2,
+      size: Math.random()*12+8,
+      life:1,
+      type:"smoke",
+      colors:["rgba(0,200,255,0.25)","rgba(0,150,255,0.15)","rgba(0,100,255,0.05)"]
+    });
+  }
 }
 
 function drawParticles(){
@@ -87,17 +91,19 @@ function drawParticles(){
     ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
     ctx.fill();
 
-    p.x += p.vx;
-    p.y += p.vy;
-    p.life -= 0.01;
+    // gerakan lebih smooth dan acak
+    p.x += p.vx * (p.type==="fire"?1:0.3);
+    p.y += p.vy * (p.type==="fire"?1:0.5);
+    p.life -= 0.008;
+    p.size *= 0.98; // partikel mengecil perlahan
   });
-  particles = particles.filter(p=>p.life>0);
+  particles = particles.filter(p=>p.life>0 && p.size>0.5);
 }
 
 function updateTrail(name,x,y){
   if(!trails[name]) trails[name]=[];
   trails[name].push({x,y});
-  if(trails[name].length>20) trails[name].shift();
+  if(trails[name].length>25) trails[name].shift();
 }
 
 function drawTrails(){
@@ -107,9 +113,12 @@ function drawTrails(){
       if(i===0) ctx.moveTo(p.x,p.y);
       else ctx.lineTo(p.x,p.y);
     });
-    ctx.strokeStyle="rgba(255,100,0,0.6)";
-    ctx.lineWidth=2;
+    ctx.strokeStyle="rgba(255,180,0,0.7)";
+    ctx.lineWidth=2.5;
+    ctx.shadowColor="rgba(255,100,0,0.5)";
+    ctx.shadowBlur=10;
     ctx.stroke();
+    ctx.shadowBlur=0;
   });
 }
 
@@ -160,7 +169,6 @@ async function main(){
       }
     }
 
-    // PlaybackRate mengikuti kecepatan
     if(isPlaying){
       garbha.playbackRate = Math.min(2, Math.max(1, 1 + avgSpeed/10));
     }
