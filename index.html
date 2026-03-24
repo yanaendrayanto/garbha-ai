@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Pixel Water Performance</title>
+  <title>Pixel Rain Avoiding Body</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
   <style>
@@ -36,7 +36,7 @@ class Particle{
   constructor(x,y){
     this.x = x;
     this.y = y;
-    this.vx = (Math.random()-0.5)*1;
+    this.vx = (Math.random()-0.5)*0.5;
     this.vy = Math.random()*3 + 2;
     this.size = Math.random()*4 + 4;
     this.alpha = Math.random()*0.5 + 0.5;
@@ -47,19 +47,23 @@ class Particle{
       const dx = this.x - p.x;
       const dy = this.y - p.y;
       const dist = Math.hypot(dx,dy);
-      if(dist < 40){ // radius sekitar tubuh
-        this.x += dx/dist*2; // dorong menjauh
-        this.y += dy/dist*2;
+      if(dist < 50){ // radius menghindari tubuh
+        // dorong partikel menjauh dari tubuh
+        this.x += dx/dist*3;
+        this.y += dy/dist*3;
       }
     });
+    // jatuh ke bawah
     this.x += this.vx;
     this.y += this.vy;
-    if(this.y > canvas.height) this.y = -10; // loop ke atas
+
+    // loop partikel ke atas jika melewati bawah
+    if(this.y > canvas.height) this.y = -10;
     if(this.x < 0) this.x = canvas.width;
     if(this.x > canvas.width) this.x = 0;
   }
   draw(ctx){
-    ctx.fillStyle = `rgba(0,150,255,${this.alpha})`;
+    ctx.fillStyle = `rgba(0,180,255,${this.alpha})`;
     ctx.fillRect(this.x,this.y,this.size,this.size);
   }
 }
@@ -89,7 +93,7 @@ async function main(){
   );
 
   // buat partikel awal
-  for(let i=0;i<800;i++){
+  for(let i=0;i<1000;i++){
     particles.push(new Particle(Math.random()*canvas.width, Math.random()*canvas.height));
   }
 
