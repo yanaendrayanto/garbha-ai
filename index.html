@@ -72,6 +72,18 @@ let isPlaying = false;
 let lastMoveTime = 0;
 let firstClick = false;
 
+window.addEventListener('click', async ()=>{
+  if(firstClick) return;
+  firstClick = true;
+  if(audioCtx.state === 'suspended') await audioCtx.resume();
+  garbha.muted = true;
+  garbha.currentTime = 0;
+  try{
+    await garbha.play(); // preload tanpa suara
+    garbha.pause();
+  }catch(e){}
+});
+
 // klik pertama untuk unlock AudioContext
 window.addEventListener('click', async ()=>{
   if(firstClick) return;
