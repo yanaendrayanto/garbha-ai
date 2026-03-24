@@ -54,12 +54,14 @@ async function setupCamera(){
   return new Promise(r=>video.onloadeddata=r);
 }
 
-// ================= AUDIO =================
+<!-- ================= AUDIO ================= -->
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const garbha = new Audio("garbha.mp3");
 
 garbha.preload = "auto";
 garbha.loop = true;
+garbha.muted = true; // 🔥 preload aman di browser
+garbha.play().catch(e=>{}); // preload
 
 const track = audioCtx.createMediaElementSource(garbha);
 const gainNode = audioCtx.createGain();
@@ -70,16 +72,32 @@ let isPlaying = false;
 let lastMoveTime = 0;
 let firstClick = false;
 
-// aktifkan audio setelah klik/touch pertama untuk bypass autoplay
+// klik pertama untuk unlock AudioContext
 window.addEventListener('click', async ()=>{
   if(firstClick) return;
   firstClick = true;
   if(audioCtx.state === 'suspended') await audioCtx.resume();
-  try{
-    await garbha.play();
-    garbha.pause(); // preload tanpa suara
-  }catch(e){}
+  garbha.muted = true;
+  garbha.currentTime = 0;
+  try{ await garbha.play(); garbha.pause(); }catch(e){}
 });
+
+// fungsi untuk play audio saat bergerak
+function playAudio(){
+  if(!isPlaying){
+    garbha.muted = false; // buka mute
+    garbha.play().catch(e=>{}); // mainkan
+    isPlaying = true;
+  }
+}
+
+// fungsi untuk pause audio saat diam
+function pauseAudio(){
+  if(isPlaying){
+    garbha.pause();
+    isPlaying = false;
+  }
+}
 
 // ================= SMOKE PARTICLE =================
 function addSmoke(x,y){
@@ -188,12 +206,16 @@ async function main(){
       });
 
       // audio logic
-      if(detectedMovement && firstClick){ 
+      if(detectedMovement && firstClick){
         lastMoveTime = Date.now();
-        if(!isPlaying){
-          garbha.play().catch(e=>{});
-          isPlaying = true;
-        }
+        playAudio(); // mainkan audio
+      }
+      
+      detectedMovement = false;
+      
+      // auto pause jika diam > 800ms
+      if(isPlaying && Date.now() - lastMoveTime > 800){
+        pauseAudio();
       }
 
       detectedMovement = false;
