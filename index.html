@@ -28,6 +28,7 @@ let isPlaying = false;
 const garbha = new Audio("garbha.mp3");
 garbha.loop = true;
 
+// Klik pertama untuk unlock audio
 let firstClick = false;
 window.addEventListener('click', ()=>{
   if(firstClick) return;
@@ -35,41 +36,13 @@ window.addEventListener('click', ()=>{
   garbha.play().catch(e=>console.log("Audio play error:", e));
 });
 
-// ================= SMOKE & TRAIL =================
-let particles = [];
-let trails = {};
-
-function addSmoke(x,y){
-  particles.push({x,y,vx:(Math.random()-0.5)*1,vy:(Math.random()-1)*1.5,size:Math.random()*8+4,life:1});
-}
-
-function drawSmoke(){
-  particles.forEach(p=>{
-    ctx.globalAlpha = p.life;
-    ctx.fillStyle = "rgba(0,255,255,0.2)";
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
-    ctx.fill();
-    p.x += p.vx; p.y += p.vy; p.life -= 0.01;
+// ================= CAMERA =================
+async function setupCamera(){
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{width:1280,height:720,facingMode:"user"}
   });
-  particles = particles.filter(p=>p.life>0);
-  ctx.globalAlpha = 1;
-}
-
-function updateTrail(name,x,y){
-  if(!trails[name]) trails[name]=[];
-  trails[name].push({x,y});
-  if(trails[name].length>20) trails[name].shift();
-}
-
-function drawTrail(){
-  Object.values(trails).forEach(points=>{
-    ctx.beginPath();
-    points.forEach(p=>ctx.lineTo(p.x,p.y));
-    ctx.strokeStyle="rgba(0,255,255,0.3)";
-    ctx.lineWidth=2;
-    ctx.stroke();
-  });
+  video.srcObject = stream;
+  return new Promise(r=>video.onloadeddata=r);
 }
 
 // ================= MOTION =================
@@ -80,9 +53,7 @@ function getSpeed(prev,curr){
 
 // ================= MAIN =================
 async function main(){
-  const stream = await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720,facingMode:"user"}});
-  video.srcObject = stream;
-  await new Promise(r=>video.onloadeddata=r);
+  await setupCamera();
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
 
@@ -96,27 +67,19 @@ async function main(){
     ctx.drawImage(video,0,0);
 
     detector.estimatePoses(video).then(poses=>{
-      let totalSpeed = 0, count=0;
       poses.forEach(pose=>{
         let kp = {};
         pose.keypoints.forEach(k=>kp[k.name]=k);
         Object.entries(kp).forEach(([name,k])=>{
           if(k.score>0.4){
-            updateTrail(name,k.x,k.y);
-            addSmoke(k.x,k.y);
-
             const speed = getSpeed(lastFrame[name],k);
             if(speed>6) detectedMovement = true;
-            totalSpeed += speed;
-            count++;
             lastFrame[name] = k;
           }
         });
       });
 
-      const avgSpeed = count>0 ? totalSpeed/count : 0;
-
-      // Audio reactive
+      // 🔥 Audio logic
       if(detectedMovement && firstClick){
         lastMoveTime = Date.now();
         if(!isPlaying){
@@ -125,8 +88,7 @@ async function main(){
         }
       }
 
-      if(isPlaying) garbha.playbackRate = Math.min(2, 1 + avgSpeed/10);
-
+      // Pause jika diam > 800ms
       if(isPlaying && Date.now() - lastMoveTime > 800){
         garbha.pause();
         isPlaying = false;
@@ -135,8 +97,6 @@ async function main(){
       detectedMovement = false;
     });
 
-    drawTrail();
-    drawSmoke();
     requestAnimationFrame(draw);
   }
 
