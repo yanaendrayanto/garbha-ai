@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Heavy Rain Head + Face Tracking</title>
+  <title>Bubble Rain - Head & Body Tracking</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
@@ -54,9 +54,9 @@ class Particle{
     this.x = x;
     this.y = y;
     this.vx = (Math.random()-0.5)*0.3;
-    this.vy = Math.random()*8 + 4;
-    this.size = Math.random()*2 + 2;
-    this.alpha = Math.random()*0.5 + 0.5;
+    this.vy = Math.random()*4 + 2;
+    this.radius = Math.random()*4 + 3;
+    this.alpha = Math.random()*0.3 + 0.3;
   }
   update(bodyBounds){
     let insideBody = bodyBounds.some(b=>{
@@ -68,13 +68,19 @@ class Particle{
     this.x += this.vx;
     this.y += this.vy;
 
-    if(this.y > canvas.height) this.y = -10;
+    if(this.y > canvas.height) this.y = Math.random()*20 - 20;
     if(this.x < 0) this.x = canvas.width;
     if(this.x > canvas.width) this.x = 0;
   }
   draw(ctx){
-    ctx.fillStyle = `rgba(0,180,255,${this.alpha})`;
-    ctx.fillRect(this.x,this.y,this.size,this.size*3);
+    // gelembung air transparan dengan cahaya
+    let grad = ctx.createRadialGradient(this.x, this.y, this.radius*0.2, this.x, this.y, this.radius);
+    grad.addColorStop(0,'rgba(180,255,255,'+this.alpha+')');
+    grad.addColorStop(1,'rgba(180,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+    ctx.fill();
   }
 }
 
@@ -94,9 +100,9 @@ function getBodyBounds(poses, faceLandmarks){
       });
     }
   });
-  // Tambah head dari faceLandmarks (misal pilih 64 titik atas kepala)
+  // head from face landmarks
   if(faceLandmarks && faceLandmarks.length){
-    const headPoints = faceLandmarks.slice(0,64); // ambil 64 titik pertama
+    const headPoints = faceLandmarks.slice(0,64);
     const xVals = headPoints.map(p=>p.x*canvas.width);
     const yVals = headPoints.map(p=>p.y*canvas.height);
     bounds.push({
@@ -121,18 +127,16 @@ async function main(){
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
 
-  // Pose detector
   const detector = await poseDetection.createDetector(
     poseDetection.SupportedModels.MoveNet,
     {modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING}
   );
 
-  // Face Mesh
   const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
   faceMesh.setOptions({maxNumFaces:1, refineLandmarks:true});
-  faceMesh.onResults(()=>{}); // hanya untuk init
+  faceMesh.onResults(()=>{});
 
-  // Partikel hujan
+  // create particles
   for(let i=0;i<1500;i++){
     particles.push(new Particle(Math.random()*canvas.width, Math.random()*canvas.height));
   }
@@ -143,7 +147,7 @@ async function main(){
 
     const poses = await detector.estimatePoses(video);
 
-    // Face detection
+    // face mesh
     let faceLandmarks = null;
     await faceMesh.send({image: video}).then(results=>{
       if(results.multiFaceLandmarks && results.multiFaceLandmarks.length>0){
@@ -153,7 +157,6 @@ async function main(){
 
     const bodyBounds = getBodyBounds(poses, faceLandmarks);
 
-    // Update & draw particles
     let totalSpeed = 0;
     let count = 0;
     let detectedMovement = false;
@@ -173,13 +176,12 @@ async function main(){
     const avgSpeed = count>0 ? totalSpeed/count : 0;
 
     particles.forEach(p=>{
-      // Atur supaya partikel jatuh dari atas kepala
-      if(p.y < 0) p.y = Math.random()*20 - 20; // awal dari atas kepala
+      if(p.y < 0) p.y = Math.random()*20 - 20;
       p.update(bodyBounds);
       p.draw(ctx);
     });
 
-    // Audio logic
+    // audio
     if(detectedMovement && firstClick){
       lastMoveTime = Date.now();
       if(!isPlaying){
@@ -187,11 +189,9 @@ async function main(){
         isPlaying = true;
       }
     }
-
     if(isPlaying){
       garbha.playbackRate = Math.min(2, Math.max(1, 1 + avgSpeed/10));
     }
-
     if(isPlaying && Date.now() - lastMoveTime > 800){
       garbha.pause();
       isPlaying = false;
