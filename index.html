@@ -64,7 +64,7 @@ async function main(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(video,0,0);
 
-    // 🔥 PENTING: pakai await supaya pose benar-benar dihitung sebelum motion
+    // ✅ gunakan await agar motion tidak hilang
     const poses = await detector.estimatePoses(video);
     let totalSpeed = 0;
     let count = 0;
@@ -94,7 +94,8 @@ async function main(){
     }
 
     if(isPlaying){
-      garbha.playbackRate = Math.min(2, Math.max(1, 1 + avgSpeed/10)); // audio ikut cepat
+      // musik ikut cepat sesuai gerakan
+      garbha.playbackRate = Math.min(2, Math.max(1, 1 + avgSpeed/10));
     }
 
     if(isPlaying && Date.now() - lastMoveTime > 800){
