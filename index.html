@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Water Body Avoidance - AI Dance</title>
+  <title>Pixel Rain Body Avoidance</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
   <style>
@@ -27,7 +27,6 @@ let firstClick = false;
 // ================= AUDIO =================
 const garbha = new Audio("garbha.mp3");
 garbha.loop = true;
-
 window.addEventListener('click', ()=>{
   if(firstClick) return;
   firstClick = true;
@@ -49,63 +48,55 @@ function getSpeed(prev,curr){
   return Math.hypot(curr.x-prev.x, curr.y-prev.y);
 }
 
-// ================= PARTICLES =================
-class WaterParticle {
-  constructor(x,y){
-    this.x = x;
-    this.y = y;
+// ================= PIXEL RAIN =================
+class PixelDrop{
+  constructor(){
+    this.reset();
+  }
+  reset(){
+    this.x = Math.random()*1280;
+    this.y = Math.random()*-720;
     this.vx = 0;
-    this.vy = Math.random()*2 + 3; // gravity
-    this.radius = Math.random()*6 + 4;
-    this.color = "rgba(0,150,255,0.6)";
+    this.vy = Math.random()*4 + 4;
+    this.size = Math.random()*2 + 1; // pixel kecil
     this.active = true;
   }
-
   update(keypoints){
     if(!this.active) return;
-
     // collision avoidance
     keypoints.forEach(k=>{
       if(k.score>0.4 && k.name!=="nose" && k.name!=="left_eye" && k.name!=="right_eye"){
         const dx = this.x - k.x;
         const dy = this.y - k.y;
         const dist = Math.hypot(dx,dy);
-        if(dist < this.radius+10){ // threshold avoidance
+        if(dist < 10){ // threshold avoidance pixel
           const angle = Math.atan2(dy,dx);
-          const force = 3;
+          const force = 2;
           this.vx += Math.cos(angle)*force;
           this.vy += Math.sin(angle)*force;
         }
       }
     });
-
-    // gravity + small random wind
-    this.vy += 0.1;
-    this.vx += (Math.random()-0.5)*0.2;
+    // gravity + small wind
+    this.vy += 0.05;
+    this.vx += (Math.random()-0.5)*0.1;
 
     this.x += this.vx;
     this.y += this.vy;
 
-    // reset if out of screen
     if(this.y > canvas.height){
-      this.y = -10;
-      this.x = Math.random()*canvas.width;
-      this.vx = 0;
-      this.vy = Math.random()*2 + 3;
+      this.reset();
     }
   }
-
   draw(){
-    ctx.beginPath();
-    ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
-    ctx.fillStyle = this.color;
-    ctx.fill();
+    ctx.fillStyle = "rgba(0,150,255,0.9)";
+    ctx.fillRect(this.x,this.y,this.size,this.size);
   }
 }
 
-let particles = [];
-for(let i=0;i<200;i++){
-  particles.push(new WaterParticle(Math.random()*1280, Math.random()*720));
+let drops = [];
+for(let i=0;i<800;i++){
+  drops.push(new PixelDrop());
 }
 
 // ================= MAIN =================
@@ -162,10 +153,10 @@ async function main(){
       isPlaying = false;
     }
 
-    // update & draw particles
-    particles.forEach(p=>{
-      p.update(keypoints);
-      p.draw();
+    // update & draw pixel rain
+    drops.forEach(d=>{
+      d.update(keypoints);
+      d.draw();
     });
 
     requestAnimationFrame(draw);
