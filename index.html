@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Pixel Water Body Interaction</title>
+  <title>Pixel Water Performance</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
   <style>
-    body {margin:0; overflow:hidden; background:black;}
-    video, canvas {position:absolute; width:100%; height:100%; object-fit:cover; transform:scaleX(-1);}
+    body{margin:0;overflow:hidden;background:black;}
+    video,canvas{position:absolute;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
   </style>
 </head>
 <body>
@@ -20,84 +20,61 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
 let lastFrame = {};
-let firstClick = false;
-
-// ================= AUDIO =================
-const garbha = new Audio("garbha.mp3");
-garbha.loop = true;
-window.addEventListener('click', () => {
-  if(firstClick) return;
-  firstClick = true;
-  garbha.play().catch(e => console.log("Audio error:", e));
-});
+let particles = [];
 
 // ================= CAMERA =================
 async function setupCamera(){
-  const stream = await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720,facingMode:"user"}});
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{width:1280,height:720,facingMode:"user"}
+  });
   video.srcObject = stream;
-  return new Promise(r => video.onloadeddata=r);
+  return new Promise(r=>video.onloadeddata=r);
 }
 
 // ================= PARTICLE =================
-const particles = [];
-const maxParticles = 1000;
-const gravity = 0.2;
-
-function createParticle(x, y){
-  return {
-    x, y,
-    vx: (Math.random()-0.5)*1.5,
-    vy: Math.random()*1.5+0.5,
-    size: Math.random()*3 + 2
-  };
-}
-
-function updateParticles(bodyPoints){
-  particles.forEach(p => {
-    // gravitasi
-    p.vy += gravity;
-    p.x += p.vx;
-    p.y += p.vy;
-
-    // hindari tubuh: geser partikel jika terlalu dekat
-    bodyPoints.forEach(bp => {
-      const dx = p.x - bp.x;
-      const dy = p.y - bp.y;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-      if(dist < 30){ // radius avoidance
-        p.x += (dx/dist)*3;
-        p.y += (dy/dist)*3;
+class Particle{
+  constructor(x,y){
+    this.x = x;
+    this.y = y;
+    this.vx = (Math.random()-0.5)*1;
+    this.vy = Math.random()*3 + 2;
+    this.size = Math.random()*4 + 4;
+    this.alpha = Math.random()*0.5 + 0.5;
+  }
+  update(bodyPoints){
+    // cek jarak ke setiap keypoint tubuh
+    bodyPoints.forEach(p=>{
+      const dx = this.x - p.x;
+      const dy = this.y - p.y;
+      const dist = Math.hypot(dx,dy);
+      if(dist < 40){ // radius sekitar tubuh
+        this.x += dx/dist*2; // dorong menjauh
+        this.y += dy/dist*2;
       }
     });
-
-    // reset jika jatuh keluar layar
-    if(p.y > canvas.height) {
-      p.y = -5;
-      p.x = Math.random() * canvas.width;
-      p.vx = (Math.random()-0.5)*1.5;
-      p.vy = Math.random()*1.5 + 0.5;
-    }
-  });
-
-  // tambah partikel baru jika belum full
-  while(particles.length < maxParticles){
-    particles.push(createParticle(Math.random()*canvas.width, Math.random()*canvas.height));
+    this.x += this.vx;
+    this.y += this.vy;
+    if(this.y > canvas.height) this.y = -10; // loop ke atas
+    if(this.x < 0) this.x = canvas.width;
+    if(this.x > canvas.width) this.x = 0;
+  }
+  draw(ctx){
+    ctx.fillStyle = `rgba(0,150,255,${this.alpha})`;
+    ctx.fillRect(this.x,this.y,this.size,this.size);
   }
 }
 
-function drawParticles(){
-  ctx.fillStyle = 'rgba(0,180,255,0.6)';
-  particles.forEach(p => {
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
-    ctx.fill();
-  });
-}
-
 // ================= MOTION =================
-function getSpeed(prev,curr){
-  if(!prev || !curr) return 0;
-  return Math.hypot(curr.x-prev.x, curr.y-prev.y);
+function getKeypoints(poses){
+  let points = [];
+  poses.forEach(pose=>{
+    pose.keypoints.forEach(k=>{
+      if(k.score > 0.4){
+        points.push({x:k.x,y:k.y});
+      }
+    });
+  });
+  return points;
 }
 
 // ================= MAIN =================
@@ -111,33 +88,23 @@ async function main(){
     {modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING}
   );
 
+  // buat partikel awal
+  for(let i=0;i<800;i++){
+    particles.push(new Particle(Math.random()*canvas.width, Math.random()*canvas.height));
+  }
+
   async function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(video,0,0);
 
     const poses = await detector.estimatePoses(video);
-    const bodyPoints = [];
-    let detectedMovement = false;
+    const bodyPoints = getKeypoints(poses);
 
-    poses.forEach(pose => {
-      pose.keypoints.forEach(k => {
-        if(k.score > 0.4){
-          bodyPoints.push({x:k.x, y:k.y});
-          const speed = getSpeed(lastFrame[k.name], k);
-          lastFrame[k.name] = k;
-          if(speed > 6) detectedMovement = true;
-        }
-      });
+    // update dan draw partikel
+    particles.forEach(p=>{
+      p.update(bodyPoints);
+      p.draw(ctx);
     });
-
-    // audio logic
-    if(detectedMovement && firstClick){
-      garbha.play().catch(e=>console.log(e));
-      garbha.playbackRate = 1 + Math.min(1, Math.random() + 0.5); // sedikit variasi saat bergerak
-    }
-
-    updateParticles(bodyPoints);
-    drawParticles();
 
     requestAnimationFrame(draw);
   }
