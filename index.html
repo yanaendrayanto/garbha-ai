@@ -54,14 +54,12 @@ async function setupCamera(){
   return new Promise(r=>video.onloadeddata=r);
 }
 
-<!-- ================= AUDIO ================= -->
+// ================= AUDIO =================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const garbha = new Audio("garbha.mp3");
-
 garbha.preload = "auto";
 garbha.loop = true;
-garbha.muted = true; // 🔥 preload aman di browser
-garbha.play().catch(e=>{}); // preload
+garbha.muted = true; // preload aman
 
 const track = audioCtx.createMediaElementSource(garbha);
 const gainNode = audioCtx.createGain();
@@ -72,6 +70,7 @@ let isPlaying = false;
 let lastMoveTime = 0;
 let firstClick = false;
 
+// klik pertama untuk unlock audio
 window.addEventListener('click', async ()=>{
   if(firstClick) return;
   firstClick = true;
@@ -79,37 +78,10 @@ window.addEventListener('click', async ()=>{
   garbha.muted = true;
   garbha.currentTime = 0;
   try{
-    await garbha.play(); // preload tanpa suara
+    await garbha.play(); // preload
     garbha.pause();
   }catch(e){}
 });
-
-// klik pertama untuk unlock AudioContext
-window.addEventListener('click', async ()=>{
-  if(firstClick) return;
-  firstClick = true;
-  if(audioCtx.state === 'suspended') await audioCtx.resume();
-  garbha.muted = true;
-  garbha.currentTime = 0;
-  try{ await garbha.play(); garbha.pause(); }catch(e){}
-});
-
-// fungsi untuk play audio saat bergerak
-function playAudio(){
-  if(!isPlaying){
-    garbha.muted = false; // buka mute
-    garbha.play().catch(e=>{}); // mainkan
-    isPlaying = true;
-  }
-}
-
-// fungsi untuk pause audio saat diam
-function pauseAudio(){
-  if(isPlaying){
-    garbha.pause();
-    isPlaying = false;
-  }
-}
 
 // ================= SMOKE PARTICLE =================
 function addSmoke(x,y){
@@ -129,12 +101,10 @@ function drawSmoke(){
     ctx.beginPath();
     ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
     ctx.fill();
-
     p.x += p.vx;
     p.y += p.vy;
     p.life -= 0.01;
   });
-
   particles = particles.filter(p=>p.life>0);
   ctx.globalAlpha = 1;
 }
@@ -143,7 +113,6 @@ function drawSmoke(){
 function updateTrail(name,x,y){
   if(!trails[name]) trails[name]=[];
   trails[name].push({x,y});
-
   if(trails[name].length>20){
     trails[name].shift();
   }
@@ -152,9 +121,7 @@ function updateTrail(name,x,y){
 function drawTrail(){
   Object.values(trails).forEach(points=>{
     ctx.beginPath();
-    points.forEach((p,i)=>{
-      ctx.lineTo(p.x,p.y);
-    });
+    points.forEach(p=>ctx.lineTo(p.x,p.y));
     ctx.strokeStyle="rgba(0,255,255,0.3)";
     ctx.lineWidth=2;
     ctx.stroke();
@@ -188,51 +155,37 @@ async function main(){
     ctx.drawImage(video,0,0);
 
     detector.estimatePoses(video).then(poses=>{
-
       poses.forEach(pose=>{
-
         let kp = {};
         pose.keypoints.forEach(k=>kp[k.name]=k);
-
         Object.entries(kp).forEach(([name,k])=>{
           if(k.score>0.4){
-
             updateTrail(name,k.x,k.y);
             addSmoke(k.x,k.y);
-
             const speed = getSpeed(lastFrame[name],k);
-
-            if(speed > 6){ 
-              detectedMovement = true;
-            }
-
+            if(speed > 6){ detectedMovement = true; }
             lastFrame[name] = k;
           }
         });
-
-        historyData.push({
-          time: Date.now(),
-          keypoints: kp
-        });
-
+        historyData.push({time: Date.now(), keypoints: kp});
       });
 
-      // audio logic
+      // 🔥 AUDIO LOGIC
       if(detectedMovement && firstClick){
         lastMoveTime = Date.now();
-        playAudio(); // mainkan audio
+        if(!isPlaying){
+          garbha.muted = false; // buka mute
+          garbha.play().catch(e=>{}); // play langsung
+          isPlaying = true;
+        }
       }
-      
       detectedMovement = false;
-      
-      // auto pause jika diam > 800ms
+
+      // pause jika diam
       if(isPlaying && Date.now() - lastMoveTime > 800){
-        pauseAudio();
+        garbha.pause();
+        isPlaying = false;
       }
-
-      detectedMovement = false;
-
-     
 
     });
 
