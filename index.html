@@ -20,10 +20,9 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
 let lastFrame = {};
-let detectedMovement = false;
 let lastMoveTime = 0;
 let isPlaying = false;
-
+let detectedMovement = false;
 let particles = [];
 let trails = {};
 let historyData = [];
@@ -41,9 +40,7 @@ window.addEventListener('click', ()=>{
 
 // ================= CAMERA =================
 async function setupCamera(){
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video:{width:1280,height:720,facingMode:"user"}
-  });
+  const stream = await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720,facingMode:"user"}});
   video.srcObject = stream;
   return new Promise(r=>video.onloadeddata=r);
 }
@@ -54,11 +51,10 @@ function getSpeed(prev,curr){
   return Math.hypot(curr.x-prev.x, curr.y-prev.y);
 }
 
-// ================= TRAIL & SMOKE =================
 function updateTrail(name,x,y){
-  if(!trails[name]) trails[name] = [];
+  if(!trails[name]) trails[name]=[];
   trails[name].push({x,y});
-  if(trails[name].length > 20) trails[name].shift();
+  if(trails[name].length>20) trails[name].shift();
 }
 
 function drawTrail(){
@@ -72,26 +68,20 @@ function drawTrail(){
 }
 
 function addSmoke(x,y){
-  particles.push({
-    x,y,
-    vx:(Math.random()-0.5)*1,
-    vy:(Math.random()-1)*1.5,
-    size:Math.random()*8+4,
-    life:1
-  });
+  particles.push({x,y,vx:(Math.random()-0.5)*1,vy:(Math.random()-1)*1.5,size:Math.random()*8+4,life:1});
 }
 
 function drawSmoke(){
   particles.forEach(p=>{
-    ctx.globalAlpha = p.life;
+    ctx.globalAlpha=p.life;
     ctx.fillStyle="rgba(0,255,255,0.2)";
     ctx.beginPath();
     ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
     ctx.fill();
-    p.x += p.vx; p.y += p.vy; p.life -= 0.01;
+    p.x+=p.vx; p.y+=p.vy; p.life-=0.01;
   });
-  particles = particles.filter(p=>p.life>0);
-  ctx.globalAlpha = 1;
+  particles=particles.filter(p=>p.life>0);
+  ctx.globalAlpha=1;
 }
 
 // ================= MAIN =================
@@ -105,60 +95,57 @@ async function main(){
     {modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING}
   );
 
-  function draw(){
+  async function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(video,0,0);
 
-    detector.estimatePoses(video).then(poses=>{
-      let totalSpeed = 0, count = 0;
+    const poses = await detector.estimatePoses(video);
+    let totalSpeed = 0;
+    let count = 0;
+    detectedMovement = false;
 
-      poses.forEach(pose=>{
-        let kp = {};
-        pose.keypoints.forEach(k=>kp[k.name]=k);
+    poses.forEach(pose=>{
+      let kp = {};
+      pose.keypoints.forEach(k=>kp[k.name]=k);
 
-        Object.entries(kp).forEach(([name,k])=>{
-          if(k.score>0.4){
-            updateTrail(name,k.x,k.y);
-            addSmoke(k.x,k.y);
+      Object.entries(kp).forEach(([name,k])=>{
+        if(k.score>0.4){
+          updateTrail(name,k.x,k.y);
+          addSmoke(k.x,k.y);
 
-            const speed = getSpeed(lastFrame[name],k);
-            if(speed>6) detectedMovement = true;
-            totalSpeed += speed;
-            count++;
-            lastFrame[name] = k;
-          }
-        });
-
-        historyData.push({time: Date.now(), keypoints: kp});
+          const speed = getSpeed(lastFrame[name],k);
+          if(speed>6) detectedMovement=true;
+          totalSpeed+=speed;
+          count++;
+          lastFrame[name]=k;
+        }
       });
 
-      // 🔥 Audio logic
-      if(detectedMovement && firstClick){
-        lastMoveTime = Date.now();
-        if(!isPlaying){
-          garbha.play().catch(e=>console.log(e));
-          isPlaying = true;
-        }
-      }
-
-      // PlaybackRate dinamis sesuai speed rata-rata
-      if(isPlaying && count>0){
-        const avgSpeed = totalSpeed/count;
-        garbha.playbackRate = Math.min(2, 1 + avgSpeed/10);
-      }
-
-      // Pause jika diam > 800ms
-      if(isPlaying && Date.now() - lastMoveTime > 800){
-        garbha.pause();
-        isPlaying = false;
-      }
-
-      detectedMovement = false;
+      historyData.push({time: Date.now(), keypoints: kp});
     });
+
+    const avgSpeed = count>0 ? totalSpeed/count : 0;
+
+    // ================= AUDIO =================
+    if(detectedMovement && firstClick){
+      lastMoveTime = Date.now();
+      if(!isPlaying){
+        garbha.play().catch(e=>console.log(e));
+        isPlaying=true;
+      }
+    }
+
+    if(isPlaying && count>0){
+      garbha.playbackRate = Math.min(2,1+avgSpeed/10);
+    }
+
+    if(isPlaying && Date.now()-lastMoveTime>800){
+      garbha.pause();
+      isPlaying=false;
+    }
 
     drawTrail();
     drawSmoke();
-
     requestAnimationFrame(draw);
   }
 
