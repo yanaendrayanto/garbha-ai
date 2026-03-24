@@ -20,7 +20,6 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
 let lastFrame = {};
-let detectedMovement = false;
 let lastMoveTime = 0;
 let isPlaying = false;
 
@@ -28,7 +27,6 @@ let isPlaying = false;
 const garbha = new Audio("garbha.mp3");
 garbha.loop = true;
 
-// Klik pertama untuk unlock audio
 let firstClick = false;
 window.addEventListener('click', ()=>{
   if(firstClick) return;
@@ -69,18 +67,20 @@ async function main(){
     detector.estimatePoses(video).then(poses=>{
       let totalSpeed = 0;
       let count = 0;
-      detectedMovement = false;
+      let detectedMovement = false; // 🔥 di sini, setelah semua keypoints dihitung
 
       poses.forEach(pose=>{
         let kp = {};
         pose.keypoints.forEach(k=>kp[k.name]=k);
+
         Object.entries(kp).forEach(([name,k])=>{
           if(k.score>0.4){
             const speed = getSpeed(lastFrame[name],k);
             totalSpeed += speed;
             count++;
             lastFrame[name] = k;
-            if(speed>6) detectedMovement = true;
+
+            if(speed > 6) detectedMovement = true; // cek gerakan cepat
           }
         });
       });
@@ -88,7 +88,7 @@ async function main(){
       // Hitung rata-rata speed
       const avgSpeed = count>0 ? totalSpeed/count : 0;
 
-      // 🔥 Audio logic
+      // 🔥 Audio play/pause
       if(detectedMovement && firstClick){
         lastMoveTime = Date.now();
         if(!isPlaying){
@@ -97,7 +97,7 @@ async function main(){
         }
       }
 
-      // Set playbackRate sesuai avgSpeed, minimal 1, maksimal 2.5
+      // Sesuaikan playbackRate sesuai avgSpeed
       if(isPlaying){
         let rate = 1 + avgSpeed/8; // tuning
         if(rate > 2.5) rate = 2.5;
