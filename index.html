@@ -68,20 +68,17 @@ track.connect(gainNode).connect(audioCtx.destination);
 
 let isPlaying = false;
 let lastMoveTime = 0;
+let firstClick = false;
 
-// aktifkan audio setelah klik/touch
+// aktifkan audio setelah klik/touch pertama untuk bypass autoplay
 window.addEventListener('click', async ()=>{
+  if(firstClick) return;
+  firstClick = true;
   if(audioCtx.state === 'suspended') await audioCtx.resume();
-  try {
+  try{
     await garbha.play();
     garbha.pause(); // preload tanpa suara
-  } catch(e){}
-});
-
-// aktifkan audio setelah klik/touch untuk bypass autoplay policy
-window.addEventListener('click', ()=>{
-  if(audioCtx.state === 'suspended') audioCtx.resume();
-  garbha.play().then(()=>garbha.pause()); // preload tanpa suara
+  }catch(e){}
 });
 
 // ================= SMOKE PARTICLE =================
@@ -140,7 +137,7 @@ function getSpeed(prev, curr){
   return Math.hypot(curr.x-prev.x, curr.y-prev.y);
 }
 
-let detectedMovement = false; // 🔥 global movement flag
+let detectedMovement = false;
 
 // ================= MAIN =================
 async function main(){
@@ -175,8 +172,7 @@ async function main(){
 
             const speed = getSpeed(lastFrame[name],k);
 
-            // 🔥 deteksi gerakan global
-            if(speed > 6){ // bisa tuning
+            if(speed > 6){ 
               detectedMovement = true;
             }
 
@@ -184,7 +180,6 @@ async function main(){
           }
         });
 
-        // SAVE JSON FRAME
         historyData.push({
           time: Date.now(),
           keypoints: kp
@@ -192,34 +187,18 @@ async function main(){
 
       });
 
-     // setelah loop semua keypoints per frame
-if(detectedMovement){
-  lastMoveTime = Date.now();
+      // audio logic
+      if(detectedMovement && firstClick){ 
+        lastMoveTime = Date.now();
+        if(!isPlaying){
+          garbha.play().catch(e=>{});
+          isPlaying = true;
+        }
+      }
 
-  if(!isPlaying){
-    garbha.play().catch(e=>{}); // play audio ketika gerak
-    isPlaying = true;
-  }
-}
+      detectedMovement = false;
 
-detectedMovement = false;
-
-// auto pause ketika diam
-if(isPlaying && Date.now() - lastMoveTime > 800){
-  garbha.pause();
-  isPlaying = false;
-}
-
-detectedMovement = false;
-
-// auto pause
-if(isPlaying && Date.now() - lastMoveTime > 800){
-  garbha.pause();
-  isPlaying = false;
-}
-
-      // auto pause kalau tidak ada gerakan
-      if(isPlaying && Date.now() - lastMoveTime > 800){ // bisa tuning 600~1200
+      if(isPlaying && Date.now() - lastMoveTime > 800){
         garbha.pause();
         isPlaying = false;
       }
