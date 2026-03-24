@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Pose AI STAGE</title>
+  <title>Pose AI STAGE PRO</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
@@ -22,6 +22,26 @@
       object-fit:cover;
       transform:scaleX(-1);
     }
+
+    #hud{
+      position:fixed;
+      top:20px;
+      left:20px;
+      z-index:9999;
+
+      background:rgba(0,0,0,0.4);
+      backdrop-filter: blur(6px);
+
+      padding:12px;
+      border-radius:10px;
+
+      color:#00ffff;
+      font-size:13px;
+      font-family:monospace;
+
+      max-width:260px;
+      white-space:pre-wrap;
+    }
   </style>
 </head>
 
@@ -29,11 +49,13 @@
 
 <video id="video" autoplay playsinline muted></video>
 <canvas id="canvas"></canvas>
+<div id="hud"></div>
 
 <script>
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+const hud = document.getElementById('hud');
 
 let trails = [];
 
@@ -47,27 +69,33 @@ async function setupCamera(){
   return new Promise(r=>video.onloadeddata=r);
 }
 
+// ================= SUDUT =================
+function sudut(A,B,C){
+  if(!A||!B||!C) return null;
+  const AB={x:A.x-B.x,y:A.y-B.y};
+  const CB={x:C.x-B.x,y:C.y-B.y};
+  const dot=AB.x*CB.x+AB.y*CB.y;
+  const mag=Math.hypot(AB.x,AB.y)*Math.hypot(CB.x,CB.y);
+  if(mag===0) return null;
+  return Math.acos(dot/mag)*(180/Math.PI);
+}
+
+function safe(v){
+  return (v && !isNaN(v)) ? v.toFixed(1) : '-';
+}
+
 // ================= GESTURE =================
 function gesture(kp){
   if(!kp.left_wrist || !kp.left_shoulder) return "none";
-
-  if(kp.left_wrist.y < kp.left_shoulder.y){
-    return "raise";
-  }
-
+  if(kp.left_wrist.y < kp.left_shoulder.y) return "raise";
   return "normal";
 }
 
-// ================= PARTICLE EFFECT =================
+// ================= PARTICLE =================
 function addTrail(x,y,color){
-  trails.push({
-    x,y,
-    life:1,
-    color
-  });
+  trails.push({x,y,life:1,color});
 }
 
-// ================= DRAW TRAILS =================
 function drawTrails(){
   trails.forEach(p=>{
     ctx.globalAlpha = p.life;
@@ -93,9 +121,7 @@ async function main(){
 
   const detector = await poseDetection.createDetector(
     poseDetection.SupportedModels.MoveNet,
-    {
-      modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING
-    }
+    {modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING}
   );
 
   async function loop(){
@@ -111,8 +137,6 @@ async function main(){
       kpArr.forEach(k=>kp[k.name]=k);
 
       const g = gesture(kp);
-
-      // ================= COLOR PER DANCER =================
       const hue = (i * 120) % 360;
 
       // ================= SKELETON =================
@@ -128,7 +152,6 @@ async function main(){
 
       conn.forEach(([a,b])=>{
         if(kp[a]?.score>0.4 && kp[b]?.score>0.4){
-
           ctx.strokeStyle = `hsl(${hue},100%,60%)`;
           ctx.lineWidth = 3;
 
@@ -139,13 +162,11 @@ async function main(){
         }
       });
 
-      // ================= VISUAL ART =================
+      // ================= VISUAL =================
       kpArr.forEach(k=>{
         if(k.score>0.4){
-
           const z = k.z || 0;
           const size = 10 - z*8;
-
           const color = `hsl(${hue},100%,70%)`;
 
           ctx.fillStyle = color;
@@ -153,10 +174,8 @@ async function main(){
           ctx.arc(k.x,k.y,size,0,Math.PI*2);
           ctx.fill();
 
-          // trail
           addTrail(k.x,k.y,color);
 
-          // gesture effect
           if(g==="raise"){
             ctx.beginPath();
             ctx.arc(k.x,k.y,30,0,Math.PI*2);
@@ -166,10 +185,26 @@ async function main(){
         }
       });
 
+      // ================= HUD DATA (HANYA DANCER 1) =================
+      if(i===0){
+        hud.textContent = `
+KETINGGIAN (px)
+Kepala: ${safe(kp.nose?.y)}
+Bahu: ${safe(kp.left_shoulder?.y)}
+Pinggul: ${safe(kp.left_hip?.y)}
+
+SUDUT (°)
+Siku Kiri: ${safe(sudut(kp.left_shoulder,kp.left_elbow,kp.left_wrist))}
+Siku Kanan: ${safe(sudut(kp.right_shoulder,kp.right_elbow,kp.right_wrist))}
+
+GESTURE
+${g}
+`;
+      }
+
     });
 
     drawTrails();
-
     requestAnimationFrame(loop);
   }
 
@@ -177,6 +212,13 @@ async function main(){
 }
 
 main();
+
+// ================= TOGGLE HUD =================
+window.addEventListener('keydown', e=>{
+  if(e.key === 'h'){
+    hud.style.display = hud.style.display === 'none' ? 'block' : 'none';
+  }
+});
 </script>
 
 </body>
