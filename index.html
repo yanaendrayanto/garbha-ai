@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>GARBHA Inferno + Topeng Real-Time Fixed</title>
+  <title>GARBHA Inferno + Topeng Wajah Oval</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
   <style>
@@ -10,7 +10,7 @@
       position:absolute;
       width:100%;
       height:100%;
-      object-fit:contain; /* <-- agar tidak ngezoom */
+      object-fit:contain; /* kamera full frame */
       transform:scaleX(-1);
     }
   </style>
@@ -26,18 +26,19 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
 let lastFrame = {};
-let isPlaying=false;
-let firstClick=false;
-let lastMoveTime=0;
-let particles=[];
+let isPlaying = false;
+let firstClick = false;
+let lastMoveTime = 0;
+let particles = [];
 
 // ================= AUDIO =================
-const garbha=new Audio("garbha.mp3");
-garbha.loop=true;
+const garbha = new Audio("garbha.mp3");
+garbha.loop = true;
+
 window.addEventListener('click', async ()=>{
   if(firstClick) return;
-  firstClick=true;
-  try{ await garbha.play(); garbha.pause(); }catch(e){console.log(e);}
+  firstClick = true;
+  try{ await garbha.play(); garbha.pause(); }catch(e){}
 });
 
 // ================= CAMERA =================
@@ -45,7 +46,7 @@ async function setupCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
     video:{width:1280,height:720,facingMode:"user"}
   });
-  video.srcObject=stream;
+  video.srcObject = stream;
   return new Promise(r=>video.onloadeddata=r);
 }
 
@@ -78,30 +79,33 @@ class Particle {
   }
 }
 
-// ================= TOPENG REAL-TIME =================
-function drawMask(keypoints){
-  // gunakan semua keypoints wajah: eyes, ears, nose, mouth
-  const facePoints = keypoints.filter(k=>["nose","left_eye","right_eye","mouth","left_ear","right_ear"].includes(k.name));
-  if(facePoints.length<4) return;
+// ================= TOPENG WUJUD OVAL =================
+function drawFaceMask(keypoints){
+  // ambil keypoints wajah utama
+  const faceKeys = keypoints.filter(k=>["left_eye","right_eye","nose","mouth_left","mouth_right"].includes(k.name));
+  if(faceKeys.length<5) return;
 
-  let minX=Math.min(...facePoints.map(p=>p.x));
-  let maxX=Math.max(...facePoints.map(p=>p.x));
-  let minY=Math.min(...facePoints.map(p=>p.y));
-  let maxY=Math.max(...facePoints.map(p=>p.y));
-
-  const width = maxX - minX;
-  const height = maxY - minY;
+  // koordinat oval kepala
+  const xs = faceKeys.map(p=>p.x);
+  const ys = faceKeys.map(p=>p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
 
   const centerX = (minX+maxX)/2;
   const centerY = (minY+maxY)/2;
+  const width = (maxX-minX)*1.5;
+  const height = (maxY-minY)*2;
 
+  // gambar oval topeng
   ctx.save();
   ctx.translate(centerX,centerY);
   ctx.fillStyle="rgba(50,50,50,0.7)";
   ctx.strokeStyle="orange";
   ctx.lineWidth=3;
   ctx.beginPath();
-  ctx.ellipse(0,0,width*1.2,height*1.5,0,0,2*Math.PI);
+  ctx.ellipse(0,0,width,height,0,0,2*Math.PI);
   ctx.fill();
   ctx.stroke();
   ctx.restore();
@@ -139,13 +143,14 @@ async function main(){
           totalSpeed+=speed; count++;
           if(speed>1) detectedMovement=true;
 
-          if(!["nose","left_eye","right_eye","mouth","left_ear","right_ear"].includes(k.name)){
+          // partikel api & asap hanya di tubuh, tangan, kaki
+          if(!["left_eye","right_eye","nose","mouth_left","mouth_right"].includes(k.name)){
             if(Math.random()<0.1) particles.push(new Particle(k.x,k.y,"fire"));
             if(Math.random()<0.05) particles.push(new Particle(k.x,k.y,"smoke"));
           }
         }
       });
-      drawMask(keypoints);
+      drawFaceMask(keypoints); // topeng oval wajah
     });
 
     const avgSpeed=count>0?totalSpeed/count:0;
