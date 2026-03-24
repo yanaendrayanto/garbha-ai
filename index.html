@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>GARBHA MODE - Fire Particles AI Dance</title>
+  <title>GARBHA MODE - Fire & Smoke AI Dance</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
   <style>
@@ -31,7 +31,6 @@ let trails = {};
 const garbha = new Audio("garbha.mp3");
 garbha.loop = true;
 
-// Klik pertama unlock audio
 window.addEventListener('click', ()=>{
   if(firstClick) return;
   firstClick = true;
@@ -54,25 +53,32 @@ function getSpeed(prev,curr){
 }
 
 // ================= PARTICLE & TRAIL =================
-function addParticle(x,y){
+function addParticles(x,y){
+  // 🔥 Fire particle
   particles.push({
     x, y,
     vx:(Math.random()-0.5)*1,
     vy:(Math.random()*-2)-0.5,
     size: Math.random()*6+4,
     life:1,
-    colors:[
-      `rgba(255,255,0,0.8)`,
-      `rgba(255,165,0,0.6)`,
-      `rgba(255,0,0,0.4)`
-    ]
+    type:"fire",
+    colors:["rgba(255,255,0,0.8)","rgba(255,165,0,0.6)","rgba(255,0,0,0.4)"]
+  });
+  // 💨 Smoke particle
+  particles.push({
+    x, y,
+    vx:(Math.random()-0.3)*0.5,
+    vy:(Math.random()*-1.2)-0.2,
+    size: Math.random()*8+6,
+    life:1,
+    type:"smoke",
+    colors:["rgba(0,200,255,0.2)","rgba(0,150,255,0.15)","rgba(0,100,255,0.1)"]
   });
 }
 
 function drawParticles(){
   particles.forEach(p=>{
-    // Gradient api
-    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+    const grd = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.size);
     grd.addColorStop(0, p.colors[0]);
     grd.addColorStop(0.5, p.colors[1]);
     grd.addColorStop(1, p.colors[2]);
@@ -101,7 +107,7 @@ function drawTrails(){
       if(i===0) ctx.moveTo(p.x,p.y);
       else ctx.lineTo(p.x,p.y);
     });
-    ctx.strokeStyle="rgba(255,100,0,0.6)"; // neon fire trail
+    ctx.strokeStyle="rgba(255,100,0,0.6)";
     ctx.lineWidth=2;
     ctx.stroke();
   });
@@ -135,8 +141,7 @@ async function main(){
           totalSpeed += speed;
           count++;
 
-          // 🔥 Particle & Trail
-          addParticle(k.x,k.y);
+          addParticles(k.x,k.y);
           updateTrail(k.name,k.x,k.y);
 
           if(speed > 6) detectedMovement = true;
@@ -155,12 +160,12 @@ async function main(){
       }
     }
 
-    // PlaybackRate mengikuti kecepatan gerak
+    // PlaybackRate mengikuti kecepatan
     if(isPlaying){
       garbha.playbackRate = Math.min(2, Math.max(1, 1 + avgSpeed/10));
     }
 
-    // Auto pause jika diam > 800ms
+    // Auto pause
     if(isPlaying && Date.now() - lastMoveTime > 800){
       garbha.pause();
       isPlaying = false;
@@ -168,7 +173,6 @@ async function main(){
 
     drawParticles();
     drawTrails();
-
     requestAnimationFrame(draw);
   }
 
