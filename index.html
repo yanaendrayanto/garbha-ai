@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Pose AI LIDAR PRO</title>
+  <title>Pose AI Stabil</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
@@ -11,7 +11,6 @@
       display:flex;
       flex-direction:row;
       justify-content:center;
-      align-items:flex-start;
       background:#111;
       color:white;
       font-family:sans-serif;
@@ -72,34 +71,10 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const panel = document.getElementById('panel');
 
-let tinggiReal = 170; // default
-let scaleCm = null;
-
-// smoothing
+let tinggiReal = 170;
 let prev = {};
 
-// koneksi skeleton
-const conn = [
-['left_shoulder','right_shoulder'],
-['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
-['right_shoulder','right_elbow'],['right_elbow','right_wrist'],
-['left_shoulder','left_hip'],['right_shoulder','right_hip'],
-['left_hip','right_hip'],
-['left_hip','left_knee'],['left_knee','left_ankle'],
-['right_hip','right_knee'],['right_knee','right_ankle']
-];
-
-// kamera
-async function setupCamera(){
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video:{width:{ideal:640},height:{ideal:480},facingMode:"user"},
-    audio:false
-  });
-  video.srcObject = stream;
-  return new Promise(r=>video.onloadeddata=r);
-}
-
-// smoothing posisi
+// smoothing
 function smooth(name,x,y){
   if(!prev[name]) prev[name]={x,y};
   prev[name].x = prev[name].x*0.7 + x*0.3;
@@ -114,21 +89,20 @@ function sudut(A,B,C){
   const CB={x:C.x-B.x,y:C.y-B.y};
   const dot=AB.x*CB.x+AB.y*CB.y;
   const mag=Math.hypot(AB.x,AB.y)*Math.hypot(CB.x,CB.y);
+  if(mag===0) return null;
   return Math.acos(dot/mag)*(180/Math.PI);
 }
 
-// draw lidar effect
-function drawLidar(minY,maxY){
-  for(let y=minY;y<maxY;y+=10){
-    ctx.strokeStyle=`rgba(0,255,255,${1-(y-minY)/(maxY-minY)})`;
-    ctx.beginPath();
-    ctx.moveTo(0,y);
-    ctx.lineTo(canvas.width,y);
-    ctx.stroke();
-  }
+// kamera
+async function setupCamera(){
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{width:{ideal:640},height:{ideal:480},facingMode:"user"},
+    audio:false
+  });
+  video.srcObject = stream;
+  return new Promise(r=>video.onloadeddata=r);
 }
 
-// main
 async function main(){
   await setupCamera();
 
@@ -149,23 +123,39 @@ async function main(){
       return requestAnimationFrame(loop);
     }
 
-    const kp = poses[0].keypoints.reduce((a,k)=>{a[k.name]=k;return a;},{})
+    const kpArr = poses[0].keypoints;
 
-    const kepala = kp.nose;
-    const kaki = kp.left_ankle?.score>0.3?kp.left_ankle:kp.right_ankle;
+    // convert ke object
+    const kp = {};
+    kpArr.forEach(k=>kp[k.name]=k);
 
-    if(!kepala || !kaki){
-      panel.textContent="Tampilkan full body";
-      return requestAnimationFrame(loop);
-    }
+    // cari semua titik valid
+    const valid = kpArr.filter(k=>k.score>0.3);
 
-    const minY = kepala.y;
-    const maxY = kaki.y;
+    // AUTO SCALE walau tidak full body
+    let minY = Math.min(...valid.map(k=>k.y));
+    let maxY = Math.max(...valid.map(k=>k.y));
 
-    // lidar effect
-    drawLidar(minY,maxY);
+    const tinggiPixel = maxY - minY;
 
-    // skeleton
+    // scaling adaptif
+    let scaleCm = tinggiReal / (tinggiPixel || 1);
+
+    const toCm = y => (y - minY) * scaleCm;
+
+    const safe = v => (v !== null && v !== undefined && !isNaN(v)) ? v.toFixed(1) : '-';
+
+    // gambar skeleton
+    const conn = [
+      ['left_shoulder','right_shoulder'],
+      ['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
+      ['right_shoulder','right_elbow'],['right_elbow','right_wrist'],
+      ['left_shoulder','left_hip'],['right_shoulder','right_hip'],
+      ['left_hip','right_hip'],
+      ['left_hip','left_knee'],['left_knee','left_ankle'],
+      ['right_hip','right_knee'],['right_knee','right_ankle']
+    ];
+
     conn.forEach(([a,b])=>{
       if(kp[a]?.score>0.3 && kp[b]?.score>0.3){
         const A = smooth(a,kp[a].x,kp[a].y);
@@ -181,37 +171,30 @@ async function main(){
     });
 
     // titik
-    Object.entries(kp).forEach(([n,k])=>{
-      if(k.score>0.3){
-        const p = smooth(n,k.x,k.y);
-        ctx.fillStyle="red";
-        ctx.beginPath();
-        ctx.arc(p.x,p.y,4,0,Math.PI*2);
-        ctx.fill();
-      }
+    valid.forEach(k=>{
+      const p = smooth(k.name,k.x,k.y);
+      ctx.fillStyle="red";
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,4,0,Math.PI*2);
+      ctx.fill();
     });
 
-    const tinggiPixel = maxY - minY;
-    if(scaleCm===null) scaleCm = tinggiReal / tinggiPixel;
-
-    const toCm = y => (y - minY) * scaleCm;
-
-    const safe = v => v? v.toFixed(1):'-';
-
+    // OUTPUT SELALU MUNCUL (walau setengah badan)
     panel.textContent = `
-TINGGI BADAN (REAL)
-Total: ${safe(tinggiReal)}
+TINGGI (Estimasi Adaptif)
+Total Referensi: ${safe(tinggiReal)}
 
-KETINGGIAN TITIK (cm)
+KETINGGIAN (cm)
 Kepala: ${safe(toCm(kp.nose?.y))}
-Bahu: ${safe(toCm(kp.left_shoulder?.y))}
+Bahu Kiri: ${safe(toCm(kp.left_shoulder?.y))}
+Bahu Kanan: ${safe(toCm(kp.right_shoulder?.y))}
 Pinggul: ${safe(toCm(kp.left_hip?.y))}
-Lutut: ${safe(toCm(kp.left_knee?.y))}
-Kaki: ${safe(toCm(kp.left_ankle?.y))}
+Tangan: ${safe(toCm(kp.left_wrist?.y))}
 
-SUDUT
-Siku: ${safe(sudut(kp.left_shoulder,kp.left_elbow,kp.left_wrist))}
-Lutut: ${safe(sudut(kp.left_hip,kp.left_knee,kp.left_ankle))}
+SUDUT (°)
+Siku Kiri: ${safe(sudut(kp.left_shoulder,kp.left_elbow,kp.left_wrist))}
+Siku Kanan: ${safe(sudut(kp.right_shoulder,kp.right_elbow,kp.right_wrist))}
+Bahu Kiri: ${safe(sudut(kp.left_elbow,kp.left_shoulder,kp.left_hip))}
 `;
 
     requestAnimationFrame(loop);
@@ -224,7 +207,6 @@ Lutut: ${safe(sudut(kp.left_hip,kp.left_knee,kp.left_ankle))}
     const input = prompt("Masukkan tinggi badan (cm):");
     if(input){
       tinggiReal = parseFloat(input);
-      scaleCm = null;
     }
   };
 
@@ -242,7 +224,7 @@ Lutut: ${safe(sudut(kp.left_hip,kp.left_knee,kp.left_ankle))}
     t.drawImage(canvas,0,0);
 
     const link=document.createElement('a');
-    link.download="pose_lidar.jpg";
+    link.download="pose.jpg";
     link.href=temp.toDataURL();
     link.click();
   };
