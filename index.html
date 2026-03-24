@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Pixel Rain Avoiding Body</title>
+  <title>Pixel Rain Avoiding Body - Umbrella Effect</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
   <style>
@@ -41,23 +41,21 @@ class Particle{
     this.size = Math.random()*4 + 4;
     this.alpha = Math.random()*0.5 + 0.5;
   }
-  update(bodyPoints){
-    // cek jarak ke setiap keypoint tubuh
-    bodyPoints.forEach(p=>{
-      const dx = this.x - p.x;
-      const dy = this.y - p.y;
-      const dist = Math.hypot(dx,dy);
-      if(dist < 50){ // radius menghindari tubuh
-        // dorong partikel menjauh dari tubuh
-        this.x += dx/dist*3;
-        this.y += dy/dist*3;
-      }
+  update(bodyBounds){
+    // Jika berada di area tubuh, lompatkan ke samping
+    let insideBody = bodyBounds.some(b=>{
+      return this.x > b.x1 && this.x < b.x2 && this.y > b.y1 && this.y < b.y2;
     });
-    // jatuh ke bawah
+    if(insideBody){
+      // pindahkan partikel ke samping secara random
+      const shift = (Math.random()<0.5? -1 : 1) * 50;
+      this.x += shift;
+      this.y -= 10; // sedikit naik agar tidak menempel tubuh
+    }
+    // jatuh
     this.x += this.vx;
     this.y += this.vy;
 
-    // loop partikel ke atas jika melewati bawah
     if(this.y > canvas.height) this.y = -10;
     if(this.x < 0) this.x = canvas.width;
     if(this.x > canvas.width) this.x = 0;
@@ -68,17 +66,22 @@ class Particle{
   }
 }
 
-// ================= MOTION =================
-function getKeypoints(poses){
-  let points = [];
-  poses.forEach(pose=>{
-    pose.keypoints.forEach(k=>{
-      if(k.score > 0.4){
-        points.push({x:k.x,y:k.y});
-      }
-    });
+// ================= BODY AREA =================
+function getBodyBounds(poses){
+  // buat kotak pembatas tubuh dari keypoints
+  let bounds = [];
+  poses.forEach(p=>{
+    const xVals = p.keypoints.filter(k=>k.score>0.4).map(k=>k.x);
+    const yVals = p.keypoints.filter(k=>k.score>0.4).map(k=>k.y);
+    if(xVals.length && yVals.length){
+      const x1 = Math.min(...xVals);
+      const x2 = Math.max(...xVals);
+      const y1 = Math.min(...yVals);
+      const y2 = Math.max(...yVals);
+      bounds.push({x1,x2,y1,y2});
+    }
   });
-  return points;
+  return bounds;
 }
 
 // ================= MAIN =================
@@ -102,11 +105,11 @@ async function main(){
     ctx.drawImage(video,0,0);
 
     const poses = await detector.estimatePoses(video);
-    const bodyPoints = getKeypoints(poses);
+    const bodyBounds = getBodyBounds(poses);
 
     // update dan draw partikel
     particles.forEach(p=>{
-      p.update(bodyPoints);
+      p.update(bodyBounds);
       p.draw(ctx);
     });
 
