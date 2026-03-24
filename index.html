@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Pixel Rain Avoiding Body - Umbrella Effect</title>
+  <title>Heavy Rain Avoiding Body (Nose Down) + Audio</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
   <style>
@@ -22,6 +22,16 @@ const ctx = canvas.getContext('2d');
 let lastFrame = {};
 let particles = [];
 
+// ================= AUDIO =================
+const garbha = new Audio("garbha.mp3");
+garbha.loop = true;
+let firstClick = false;
+window.addEventListener('click', ()=>{
+  if(firstClick) return;
+  firstClick = true;
+  garbha.play().catch(e=>console.log("Audio play error:", e));
+});
+
 // ================= CAMERA =================
 async function setupCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
@@ -36,23 +46,22 @@ class Particle{
   constructor(x,y){
     this.x = x;
     this.y = y;
-    this.vx = (Math.random()-0.5)*0.5;
-    this.vy = Math.random()*3 + 2;
-    this.size = Math.random()*4 + 4;
+    this.vx = (Math.random()-0.5)*0.3; // miring sedikit
+    this.vy = Math.random()*8 + 4; // hujan deras
+    this.size = Math.random()*2 + 2;
     this.alpha = Math.random()*0.5 + 0.5;
   }
   update(bodyBounds){
-    // Jika berada di area tubuh, lompatkan ke samping
+    // hindari tubuh (dari hidung ke bawah)
     let insideBody = bodyBounds.some(b=>{
       return this.x > b.x1 && this.x < b.x2 && this.y > b.y1 && this.y < b.y2;
     });
     if(insideBody){
-      // pindahkan partikel ke samping secara random
       const shift = (Math.random()<0.5? -1 : 1) * 50;
       this.x += shift;
-      this.y -= 10; // sedikit naik agar tidak menempel tubuh
+      this.y -= 10;
     }
-    // jatuh
+
     this.x += this.vx;
     this.y += this.vy;
 
@@ -62,23 +71,35 @@ class Particle{
   }
   draw(ctx){
     ctx.fillStyle = `rgba(0,180,255,${this.alpha})`;
-    ctx.fillRect(this.x,this.y,this.size,this.size);
+    ctx.fillRect(this.x,this.y,this.size,this.size*3);
   }
 }
 
 // ================= BODY AREA =================
+// Hanya hitung tubuh dari hidung ke bawah
 function getBodyBounds(poses){
-  // buat kotak pembatas tubuh dari keypoints
   let bounds = [];
   poses.forEach(p=>{
-    const xVals = p.keypoints.filter(k=>k.score>0.4).map(k=>k.x);
-    const yVals = p.keypoints.filter(k=>k.score>0.4).map(k=>k.y);
-    if(xVals.length && yVals.length){
-      const x1 = Math.min(...xVals);
-      const x2 = Math.max(...xVals);
-      const y1 = Math.min(...yVals);
-      const y2 = Math.max(...yVals);
-      bounds.push({x1,x2,y1,y2});
+    const keypoints = p.keypoints.filter(k=>k.score>0.4);
+    const relevant = keypoints.filter(k=>{
+      // Ambil semua keypoints mulai dari 'nose' ke bawah
+      const order = ['nose','left_eye','right_eye','left_ear','right_ear',
+                     'left_shoulder','right_shoulder','left_elbow','right_elbow',
+                     'left_wrist','right_wrist','left_hip','right_hip',
+                     'left_knee','right_knee','left_ankle','right_ankle'];
+      const index = order.indexOf(k.name);
+      return index >= 0 && index >= order.indexOf('nose'); 
+    });
+
+    if(relevant.length){
+      const xVals = relevant.map(k=>k.x);
+      const yVals = relevant.map(k=>k.y);
+      bounds.push({
+        x1: Math.min(...xVals),
+        x2: Math.max(...xVals),
+        y1: Math.min(...yVals),
+        y2: Math.max(...yVals)
+      });
     }
   });
   return bounds;
@@ -95,8 +116,8 @@ async function main(){
     {modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING}
   );
 
-  // buat partikel awal
-  for(let i=0;i<1000;i++){
+  // buat hujan deras
+  for(let i=0;i<2000;i++){
     particles.push(new Particle(Math.random()*canvas.width, Math.random()*canvas.height));
   }
 
@@ -107,7 +128,7 @@ async function main(){
     const poses = await detector.estimatePoses(video);
     const bodyBounds = getBodyBounds(poses);
 
-    // update dan draw partikel
+    // update & draw partikel
     particles.forEach(p=>{
       p.update(bodyBounds);
       p.draw(ctx);
