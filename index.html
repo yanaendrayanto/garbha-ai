@@ -1,24 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Pose AI STAGE PRO MAX</title>
+  <title>GARBHA MODE - AI Dance System</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
 
   <style>
-    body{
-      margin:0;
-      overflow:hidden;
-      background:black;
-    }
-
-    #container{
-      position:relative;
-      width:100vw;
-      height:100vh;
-    }
-
+    body{margin:0;overflow:hidden;background:black;}
     video,canvas{
       position:absolute;
       width:100%;
@@ -26,38 +15,24 @@
       object-fit:cover;
       transform:scaleX(-1);
     }
-
-    canvas{
-      z-index:2;
-    }
-
     #hud{
       position:fixed;
       top:20px;
       left:20px;
       z-index:9999;
-
       background:rgba(0,0,0,0.3);
-      backdrop-filter: blur(6px);
-
       padding:12px;
       border-radius:10px;
-
       color:#00ffff;
-      font-size:13px;
       font-family:monospace;
-      line-height:1.5;
     }
   </style>
 </head>
 
 <body>
 
-<div id="container">
-  <video id="video" autoplay playsinline muted></video>
-  <canvas id="canvas"></canvas>
-</div>
-
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
 <div id="hud"></div>
 
 <script>
@@ -67,110 +42,89 @@ const ctx = canvas.getContext('2d');
 const hud = document.getElementById('hud');
 
 let particles = [];
-let lastKeypoints = {};
+let trails = {};
+let historyData = [];
 
 // ================= CAMERA =================
 async function setupCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ width:1280, height:720, facingMode:"user" }
+    video:{width:1280,height:720,facingMode:"user"}
   });
   video.srcObject = stream;
   return new Promise(r=>video.onloadeddata=r);
 }
 
-// ================= SMOOTH =================
-function smooth(kp){
-  const out = {};
-  for(let k in kp){
-    if(!lastKeypoints[k]){
-      out[k] = kp[k];
-    } else {
-      out[k] = {
-        ...kp[k],
-        x: lastKeypoints[k].x * 0.7 + kp[k].x * 0.3,
-        y: lastKeypoints[k].y * 0.7 + kp[k].y * 0.3
-      };
-    }
-  }
-  lastKeypoints = out;
-  return out;
+// ================= AUDIO =================
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(intensity){
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.frequency.value = 200 + intensity*500;
+  gain.gain.value = 0.05;
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.1);
 }
 
-// ================= CM =================
-const REAL_HEIGHT_CM = 170;
-
-function getBodyHeightPx(kp){
-  if(!kp.nose || !kp.left_ankle) return null;
-  return Math.abs(kp.nose.y - kp.left_ankle.y);
-}
-
-function pxToCm(px, bodyPx){
-  if(!px || !bodyPx) return null;
-  return (px / bodyPx) * REAL_HEIGHT_CM;
-}
-
-// ================= UTILS =================
-function sudut(A,B,C){
-  if(!A||!B||!C) return null;
-  const AB={x:A.x-B.x,y:A.y-B.y};
-  const CB={x:C.x-B.x,y:C.y-B.y};
-  const dot=AB.x*CB.x+AB.y*CB.y;
-  const mag=Math.hypot(AB.x,AB.y)*Math.hypot(CB.x,CB.y);
-  return mag ? Math.acos(dot/mag)*(180/Math.PI) : null;
-}
-
-function safe(v){
-  return (v && !isNaN(v)) ? v.toFixed(1) : '-';
-}
-
-function gesture(kp){
-  if(!kp.left_wrist || !kp.left_shoulder) return "none";
-  return kp.left_wrist.y < kp.left_shoulder.y ? "raise" : "normal";
-}
-
-// ================= EMOSI =================
-function getEmotion(kp){
-  if(!kp.left_shoulder || !kp.right_shoulder) return "unknown";
-
-  const tilt = kp.left_shoulder.y - kp.right_shoulder.y;
-
-  if(Math.abs(tilt) > 40) return "expressive";
-  if(kp.nose && kp.nose.y < kp.left_shoulder.y - 100) return "confident";
-  if(kp.nose && kp.nose.y > kp.left_shoulder.y + 50) return "low energy";
-
-  return "neutral";
-}
-
-// ================= PARTICLE =================
-function addParticle(x,y,color){
-  if(Math.random() > 0.6) return; // biar tidak terlalu ramai
-
+// ================= SMOKE PARTICLE =================
+function addSmoke(x,y){
   particles.push({
     x,y,
-    vx:(Math.random()-0.5)*0.5,
-    vy:Math.random()*1.5,
-    life:1,
-    size:Math.random()*3+1,
-    color
+    vx:(Math.random()-0.5)*1,
+    vy:(Math.random()-1)*1.5,
+    size:Math.random()*8+4,
+    life:1
   });
 }
 
-function drawParticles(){
+function drawSmoke(){
   particles.forEach(p=>{
     ctx.globalAlpha = p.life;
-    ctx.fillStyle = p.color;
-
+    ctx.fillStyle = "rgba(0,255,255,0.2)";
     ctx.beginPath();
     ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
     ctx.fill();
 
     p.x += p.vx;
     p.y += p.vy;
-    p.life -= 0.015;
+    p.life -= 0.01;
   });
 
   particles = particles.filter(p=>p.life>0);
   ctx.globalAlpha = 1;
+}
+
+// ================= TRAIL =================
+function updateTrail(name,x,y){
+  if(!trails[name]) trails[name]=[];
+  trails[name].push({x,y});
+
+  if(trails[name].length>20){
+    trails[name].shift();
+  }
+}
+
+function drawTrail(){
+  Object.values(trails).forEach(points=>{
+    ctx.beginPath();
+    points.forEach((p,i)=>{
+      ctx.lineTo(p.x,p.y);
+    });
+    ctx.strokeStyle="rgba(0,255,255,0.3)";
+    ctx.lineWidth=2;
+    ctx.stroke();
+  });
+}
+
+// ================= MOTION =================
+function getSpeed(prev, curr){
+  if(!prev || !curr) return 0;
+  return Math.hypot(curr.x-prev.x, curr.y-prev.y);
 }
 
 // ================= MAIN =================
@@ -185,73 +139,50 @@ async function main(){
     {modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING}
   );
 
+  let lastFrame = {};
+
   function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    ctx.drawImage(video,0,0);
 
     detector.estimatePoses(video).then(poses=>{
 
-      poses.forEach((pose,i)=>{
+      poses.forEach(pose=>{
 
         let kp = {};
         pose.keypoints.forEach(k=>kp[k.name]=k);
 
-        kp = smooth(kp);
+        Object.entries(kp).forEach(([name,k])=>{
 
-        const hue = (i*120)%360;
-        const g = gesture(kp);
-        const emotion = getEmotion(kp);
-        const bodyPx = getBodyHeightPx(kp);
+          if(k.score>0.4){
 
-        const conn = [
-          ['left_shoulder','right_shoulder'],
-          ['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
-          ['right_shoulder','right_elbow'],['right_elbow','right_wrist'],
-          ['left_shoulder','left_hip'],['right_shoulder','right_hip'],
-          ['left_hip','right_hip'],
-          ['left_hip','left_knee'],['left_knee','left_ankle'],
-          ['right_hip','right_knee'],['right_knee','right_ankle']
-        ];
+            updateTrail(name,k.x,k.y);
+            addSmoke(k.x,k.y);
 
-        conn.forEach(([a,b])=>{
-          if(kp[a]?.score>0.4 && kp[b]?.score>0.4){
+            const speed = getSpeed(lastFrame[name],k);
 
-            ctx.strokeStyle=`hsl(${hue},100%,60%)`;
-            ctx.lineWidth=3;
-            ctx.beginPath();
-            ctx.moveTo(kp[a].x,kp[a].y);
-            ctx.lineTo(kp[b].x,kp[b].y);
-            ctx.stroke();
+            if(speed>10){
+              playSound(speed/50);
+            }
 
-            addParticle(
-              (kp[a].x+kp[b].x)/2,
-              (kp[a].y+kp[b].y)/2,
-              `hsl(${hue},100%,70%)`
-            );
+            lastFrame[name] = k;
           }
+
         });
 
-        if(i===0){
-          hud.innerHTML = `
-<b>TINGGI (CM)</b><br>
-Bahu: ${safe(pxToCm(kp.left_shoulder?.y, bodyPx))}<br>
-Pinggul: ${safe(pxToCm(kp.left_hip?.y, bodyPx))}<br><br>
-
-<b>SUDUT</b><br>
-Siku Kiri: ${safe(sudut(kp.left_shoulder,kp.left_elbow,kp.left_wrist))}<br>
-Siku Kanan: ${safe(sudut(kp.right_shoulder,kp.right_elbow,kp.right_wrist))}<br><br>
-
-<b>EMOSI</b><br>${emotion}<br><br>
-
-<b>GESTURE</b><br>${g}
-`;
-        }
+        // SAVE JSON FRAME
+        historyData.push({
+          time: Date.now(),
+          keypoints: kp
+        });
 
       });
 
     });
 
-    drawParticles();
+    drawTrail();
+    drawSmoke();
+
     requestAnimationFrame(draw);
   }
 
@@ -259,6 +190,17 @@ Siku Kanan: ${safe(sudut(kp.right_shoulder,kp.right_elbow,kp.right_wrist))}<br><
 }
 
 main();
+
+// ================= EXPORT =================
+window.addEventListener('keydown', e=>{
+  if(e.key === 's'){
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(historyData));
+    const dl = document.createElement('a');
+    dl.setAttribute("href", dataStr);
+    dl.setAttribute("download", "dance_data.json");
+    dl.click();
+  }
+});
 </script>
 
 </body>
