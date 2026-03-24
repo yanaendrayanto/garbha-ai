@@ -26,8 +26,8 @@ let isPlaying = false;
 // ================= AUDIO =================
 const garbha = new Audio("garbha.mp3");
 garbha.loop = true;
-
 let firstClick = false;
+
 window.addEventListener('click', ()=>{
   if(firstClick) return;
   firstClick = true;
@@ -64,27 +64,27 @@ async function main(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(video,0,0);
 
-    // ✅ gunakan await agar motion tidak hilang
+    // ✅ Gunakan await di loop utama
     const poses = await detector.estimatePoses(video);
+    let detectedMovement = false;
     let totalSpeed = 0;
     let count = 0;
-    let detectedMovement = false;
 
     poses.forEach(pose=>{
       pose.keypoints.forEach(k=>{
-        if(k.score>0.4){
+        if(k.score > 0.4){
           const speed = getSpeed(lastFrame[k.name], k);
           lastFrame[k.name] = k;
           totalSpeed += speed;
           count++;
-          if(speed>6) detectedMovement = true;
+          if(speed > 6) detectedMovement = true;
         }
       });
     });
 
-    const avgSpeed = count>0 ? totalSpeed/count : 0;
+    const avgSpeed = count > 0 ? totalSpeed/count : 0;
 
-    // ================= AUDIO LOGIC =================
+    // Audio logic
     if(detectedMovement && firstClick){
       lastMoveTime = Date.now();
       if(!isPlaying){
@@ -94,10 +94,10 @@ async function main(){
     }
 
     if(isPlaying){
-      // musik ikut cepat sesuai gerakan
       garbha.playbackRate = Math.min(2, Math.max(1, 1 + avgSpeed/10));
     }
 
+    // Auto pause jika diam
     if(isPlaying && Date.now() - lastMoveTime > 800){
       garbha.pause();
       isPlaying = false;
