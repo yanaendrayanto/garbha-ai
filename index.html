@@ -1,26 +1,77 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Pose Estimation Capture JPG</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+  <title>Pose Estimation Pro</title>
+
+  <!-- FIX CDN (WAJIB) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+
   <style>
-    body { display:flex; flex-direction:row; align-items:flex-start; font-family:sans-serif; background:#f0f0f0; margin:20px;}
-    #container { position:relative; width:480px; height:480px; border:1px solid #ccc; }
-    video, canvas { width:480px; height:480px; display:block; }
-    canvas { position:absolute; top:0; left:0; pointer-events:none; }
-    #output { background:#eee; padding:10px; margin-left:20px; width:220px; white-space:pre-wrap; font-size:14px; }
-    #capture { position:fixed; top:20px; right:20px; z-index:100; padding:10px 20px; font-size:16px; background:#28a745; color:white; border:none; border-radius:5px; cursor:pointer; }
-    #capture:hover { background:#218838; }
+    body {
+      display:flex;
+      flex-direction:row;
+      justify-content:center;
+      align-items:flex-start;
+      font-family:sans-serif;
+      background:#f0f0f0;
+      margin:20px;
+    }
+
+    #container {
+      position:relative;
+      width:480px;
+      height:480px;
+    }
+
+    video {
+      position:absolute;
+      width:480px;
+      height:480px;
+      transform:scaleX(-1); /* mirror */
+    }
+
+    canvas {
+      position:absolute;
+      width:480px;
+      height:480px;
+      pointer-events:none;
+    }
+
+    #output {
+      background:#eee;
+      padding:10px;
+      margin-left:20px;
+      width:250px;
+      white-space:pre-wrap;
+      font-size:14px;
+    }
+
+    #capture {
+      position:fixed;
+      top:20px;
+      right:20px;
+      z-index:100;
+      padding:10px 20px;
+      font-size:16px;
+      background:#28a745;
+      color:white;
+      border:none;
+      border-radius:5px;
+      cursor:pointer;
+    }
   </style>
 </head>
+
 <body>
+
 <div id="container">
   <video id="video" autoplay muted playsinline></video>
   <canvas id="canvas" width="480" height="480"></canvas>
 </div>
+
 <pre id="output"></pre>
-<button id="capture">Capture Pose (JPG)</button>
+<button id="capture">Ambil Gambar</button>
 
 <script>
 const video = document.getElementById('video');
@@ -32,10 +83,12 @@ const captureBtn = document.getElementById('capture');
 const videoWidth = 480;
 const videoHeight = 480;
 const userHeightCm = 170;
-const smoothingFrames = 5;
 
+// anti crash
+const safe = v => (v !== undefined && !isNaN(v)) ? v.toFixed(1) : '-';
+
+// koneksi skeleton
 const connections = [
-  ['nose','left_eye'], ['nose','right_eye'],
   ['left_shoulder','right_shoulder'],
   ['left_shoulder','left_elbow'], ['left_elbow','left_wrist'],
   ['right_shoulder','right_elbow'], ['right_elbow','right_wrist'],
@@ -45,21 +98,16 @@ const connections = [
   ['right_hip','right_knee'], ['right_knee','right_ankle']
 ];
 
-// Kamera
-async function setupCamera() {
+// kamera
+async function setupCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { width: videoWidth, height: videoHeight },
-    audio: false
+    video:{width:videoWidth,height:videoHeight},
+    audio:false
   });
   video.srcObject = stream;
-  await video.play();
-}
-
-// smoothing
-function smoothValue(history,val){
-  history.push(val);
-  if(history.length>smoothingFrames) history.shift();
-  return history.reduce((a,b)=>a+b,0)/history.length;
+  return new Promise(resolve=>{
+    video.onloadeddata = ()=>resolve();
+  });
 }
 
 // sudut
@@ -75,18 +123,17 @@ function getAngle(A,B,C){
 
 // gambar skeleton
 function drawPose(keypoints){
-  const mirrorX = x => videoWidth - x;
-
   ctx.strokeStyle='blue';
   ctx.lineWidth=3;
 
   connections.forEach(pair=>{
-    const kp1=keypoints.find(k=>k.name===pair[0]);
-    const kp2=keypoints.find(k=>k.name===pair[1]);
-    if(kp1 && kp2 && kp1.score>0.3 && kp2.score>0.3){
+    const a = keypoints.find(k=>k.name===pair[0]);
+    const b = keypoints.find(k=>k.name===pair[1]);
+
+    if(a && b && a.score>0.3 && b.score>0.3){
       ctx.beginPath();
-      ctx.moveTo(mirrorX(kp1.x),kp1.y);
-      ctx.lineTo(mirrorX(kp2.x),kp2.y);
+      ctx.moveTo(a.x,a.y);
+      ctx.lineTo(b.x,b.y);
       ctx.stroke();
     }
   });
@@ -94,13 +141,14 @@ function drawPose(keypoints){
   keypoints.forEach(k=>{
     if(k.score>0.3){
       ctx.beginPath();
-      ctx.arc(mirrorX(k.x),k.y,5,0,2*Math.PI);
+      ctx.arc(k.x,k.y,5,0,2*Math.PI);
       ctx.fillStyle='red';
       ctx.fill();
     }
   });
 }
 
+// konversi cm
 function yToCm(y,minY,maxY){
   return (y-minY)*userHeightCm/(maxY-minY);
 }
@@ -110,100 +158,106 @@ async function main(){
 
   const detector = await poseDetection.createDetector(
     poseDetection.SupportedModels.MoveNet,
-    { modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER }
+    {modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER}
   );
-
-  const smoothHistory={};
-  const logFrames={};
 
   async function loop(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // video mirror
-    ctx.save();
-    ctx.scale(-1,1);
-    ctx.drawImage(video,-videoWidth,0,videoWidth,videoHeight);
-    ctx.restore();
-
     const poses = await detector.estimatePoses(video,{flipHorizontal:true});
 
-    if(poses.length>0){
-      const keypoints = poses[0].keypoints;
-      drawPose(keypoints);
-
-      const validY = keypoints.filter(k=>k.score>0.3).map(k=>k.y);
-      const minY=Math.min(...validY);
-      const maxY=Math.max(...validY);
-
-      const kp=name=>keypoints.find(k=>k.name===name);
-
-      const heights={
-        kepala: yToCm(smoothValue(smoothHistory.kepala||=[],kp('nose')?.y||0),minY,maxY),
-        bahuKiri: yToCm(smoothValue(smoothHistory.bk||=[],kp('left_shoulder')?.y||0),minY,maxY),
-        bahuKanan: yToCm(smoothValue(smoothHistory.bn||=[],kp('right_shoulder')?.y||0),minY,maxY)
-      };
-
-      const angles={
-        sikuKiri: getAngle(kp('left_shoulder'),kp('left_elbow'),kp('left_wrist')),
-        sikuKanan: getAngle(kp('right_shoulder'),kp('right_elbow'),kp('right_wrist'))
-      };
-
-      output.textContent = `
-Ketinggian (cm)
-Kepala: ${heights.kepala.toFixed(1)}
-Bahu Kiri: ${heights.bahuKiri.toFixed(1)}
-Bahu Kanan: ${heights.bahuKanan.toFixed(1)}
-
-Sudut (°)
-Siku Kiri: ${angles.sikuKiri.toFixed(1)}
-Siku Kanan: ${angles.sikuKanan.toFixed(1)}
-      `;
-
-      logFrames[Date.now()]={heights,angles};
-    } else {
+    if(!poses || poses.length===0){
       output.textContent="Pose belum terdeteksi";
+      requestAnimationFrame(loop);
+      return;
     }
+
+    const keypoints = poses[0].keypoints;
+    drawPose(keypoints);
+
+    const validY = keypoints.filter(k=>k.score>0.3).map(k=>k.y);
+    const minY = Math.min(...validY);
+    const maxY = Math.max(...validY);
+
+    const kp = n => keypoints.find(k=>k.name===n);
+
+    const heights = {
+      kepala: yToCm(kp('nose')?.y,minY,maxY),
+      bahuKiri: yToCm(kp('left_shoulder')?.y,minY,maxY),
+      bahuKanan: yToCm(kp('right_shoulder')?.y,minY,maxY),
+      pinggulKiri: yToCm(kp('left_hip')?.y,minY,maxY),
+      pinggulKanan: yToCm(kp('right_hip')?.y,minY,maxY),
+      lututKiri: yToCm(kp('left_knee')?.y,minY,maxY),
+      lututKanan: yToCm(kp('right_knee')?.y,minY,maxY),
+      kakiKiri: yToCm(kp('left_ankle')?.y,minY,maxY),
+      kakiKanan: yToCm(kp('right_ankle')?.y,minY,maxY)
+    };
+
+    const angles = {
+      sikuKiri: getAngle(kp('left_shoulder'),kp('left_elbow'),kp('left_wrist')),
+      sikuKanan: getAngle(kp('right_shoulder'),kp('right_elbow'),kp('right_wrist')),
+      lututKiri: getAngle(kp('left_hip'),kp('left_knee'),kp('left_ankle')),
+      lututKanan: getAngle(kp('right_hip'),kp('right_knee'),kp('right_ankle'))
+    };
+
+    output.textContent = `
+KETINGGIAN (cm)
+Kepala: ${safe(heights.kepala)}
+Bahu Kiri: ${safe(heights.bahuKiri)}
+Bahu Kanan: ${safe(heights.bahuKanan)}
+Pinggul Kiri: ${safe(heights.pinggulKiri)}
+Pinggul Kanan: ${safe(heights.pinggulKanan)}
+Lutut Kiri: ${safe(heights.lututKiri)}
+Lutut Kanan: ${safe(heights.lututKanan)}
+Kaki Kiri: ${safe(heights.kakiKiri)}
+Kaki Kanan: ${safe(heights.kakiKanan)}
+
+SUDUT (°)
+Siku Kiri: ${safe(angles.sikuKiri)}
+Siku Kanan: ${safe(angles.sikuKanan)}
+Lutut Kiri: ${safe(angles.lututKiri)}
+Lutut Kanan: ${safe(angles.lututKanan)}
+`;
 
     requestAnimationFrame(loop);
   }
 
   loop();
 
+  // capture FIX
   captureBtn.onclick=()=>{
-    const tempCanvas=document.createElement('canvas');
-    const tempCtx=tempCanvas.getContext('2d');
+    const temp = document.createElement('canvas');
+    const tctx = temp.getContext('2d');
 
-    const width=videoWidth+output.offsetWidth;
-    const height=videoHeight;
+    temp.width = videoWidth + 260;
+    temp.height = videoHeight;
 
-    tempCanvas.width=width;
-    tempCanvas.height=height;
+    tctx.fillStyle="#f0f0f0";
+    tctx.fillRect(0,0,temp.width,temp.height);
 
-    tempCtx.fillStyle="#f0f0f0";
-    tempCtx.fillRect(0,0,width,height);
+    tctx.save();
+    tctx.scale(-1,1);
+    tctx.drawImage(video,-videoWidth,0,videoWidth,videoHeight);
+    tctx.restore();
 
-    tempCtx.save();
-    tempCtx.scale(-1,1);
-    tempCtx.drawImage(video,-videoWidth,0,videoWidth,videoHeight);
-    tempCtx.restore();
+    tctx.drawImage(canvas,0,0);
 
-    tempCtx.drawImage(canvas,0,0);
-
-    tempCtx.fillStyle="black";
-    tempCtx.font="14px sans-serif";
+    tctx.fillStyle="black";
+    tctx.font="14px sans-serif";
 
     output.textContent.split("\n").forEach((line,i)=>{
-      tempCtx.fillText(line,videoWidth+10,20+i*18);
+      tctx.fillText(line,videoWidth+10,20+i*18);
     });
 
     const link=document.createElement('a');
     link.download="pose.jpg";
-    link.href=tempCanvas.toDataURL("image/jpeg");
+    link.href=temp.toDataURL("image/jpeg");
     link.click();
   };
 }
 
 main();
 </script>
+
 </body>
 </html>
