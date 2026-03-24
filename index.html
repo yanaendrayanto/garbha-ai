@@ -56,7 +56,7 @@ function addSmoke(x,y){
   particles.push({
     x, y,
     vx:(Math.random()-0.5)*1,
-    vy:(Math.random()-1)*1.5,
+    vy:(Math.random()-1.5)*1.5,
     size:Math.random()*6+4,
     life:1
   });
@@ -125,7 +125,7 @@ async function main(){
           count++;
           if(speed > 6) detectedMovement = true;
 
-          // 🔥 smoke & trail
+          // ✅ Tambahkan particle & trail di setiap keypoint
           addSmoke(k.x,k.y);
           updateTrail(k.name,k.x,k.y);
         }
@@ -154,6 +154,7 @@ async function main(){
 
     drawTrail();
     drawSmoke();
+
     requestAnimationFrame(draw);
   }
 
