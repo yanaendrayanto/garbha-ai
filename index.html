@@ -58,18 +58,25 @@ async function setupCamera(){
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const garbha = new Audio("garbha.mp3");
 
-// 🔥 pastikan preload & resume
 garbha.preload = "auto";
 garbha.loop = true;
 
 const track = audioCtx.createMediaElementSource(garbha);
 const gainNode = audioCtx.createGain();
-gainNode.gain.value = 2.5; // volume boost
-
+gainNode.gain.value = 2.5;
 track.connect(gainNode).connect(audioCtx.destination);
 
 let isPlaying = false;
 let lastMoveTime = 0;
+
+// aktifkan audio setelah klik/touch
+window.addEventListener('click', async ()=>{
+  if(audioCtx.state === 'suspended') await audioCtx.resume();
+  try {
+    await garbha.play();
+    garbha.pause(); // preload tanpa suara
+  } catch(e){}
+});
 
 // aktifkan audio setelah klik/touch untuk bypass autoplay policy
 window.addEventListener('click', ()=>{
@@ -185,14 +192,22 @@ async function main(){
 
       });
 
-      // setelah loop semua keypoints per frame
+     // setelah loop semua keypoints per frame
 if(detectedMovement){
   lastMoveTime = Date.now();
 
   if(!isPlaying){
-    garbha.play().catch(e=>{}); // play audio
+    garbha.play().catch(e=>{}); // play audio ketika gerak
     isPlaying = true;
   }
+}
+
+detectedMovement = false;
+
+// auto pause ketika diam
+if(isPlaying && Date.now() - lastMoveTime > 800){
+  garbha.pause();
+  isPlaying = false;
 }
 
 detectedMovement = false;
