@@ -107,12 +107,12 @@ const FACE_68 = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,
 
 // ================= AUDIO =================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const dest = audioCtx.createMediaStreamDestination(); // 🔥 GLOBAL
 
 function playSound(intensity){
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   const filter = audioCtx.createBiquadFilter();
-  const dest = audioCtx.createMediaStreamDestination();
 
   osc.type = "sine";
   osc.frequency.value = 180 + intensity * 5;
