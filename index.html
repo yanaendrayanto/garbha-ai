@@ -113,7 +113,7 @@ function addSmoke(x,y){
     x,y,
     vx:(Math.random()-0.5)*1.5,
     vy:(Math.random()-1)*1.2,
-    size:Math.random()*6 + energy*0.05,
+    size:Math.random()*6 + energy*0.08 + Math.random()*5,
     life:1
   });
 }
@@ -130,6 +130,51 @@ function drawSmoke(){
   particles = particles.filter(p=>p.life>0);
   ctx.globalAlpha=1;
 }
+  // ================= CINEMATIC LIGHT =================
+
+let gradient = ctx.createRadialGradient(
+  canvas.width/2,
+  canvas.height/2,
+  50,
+  canvas.width/2,
+  canvas.height/2,
+  canvas.width/1.2
+);
+
+if(mode === "ambient"){
+  gradient.addColorStop(0, "rgba(0,50,100,0.2)");
+  gradient.addColorStop(1, "rgba(0,0,0,0.9)");
+}
+
+if(mode === "spirit"){
+  gradient.addColorStop(0, "rgba(150,0,255,0.25)");
+  gradient.addColorStop(1, "rgba(0,0,0,0.9)");
+}
+
+if(mode === "chaos"){
+  gradient.addColorStop(0, "rgba(255,100,0,0.3)");
+  gradient.addColorStop(1, "rgba(0,0,0,0.95)");
+}
+
+ctx.fillStyle = gradient;
+ctx.fillRect(0,0,canvas.width,canvas.height);
+
+// ================= ENERGY WAVE =================
+
+let wave = Math.sin(Date.now() * 0.005) * 20;
+
+ctx.beginPath();
+ctx.arc(
+  canvas.width/2,
+  canvas.height/2,
+  150 + wave + energy,
+  0,
+  Math.PI * 2
+);
+
+ctx.strokeStyle = `rgba(0,255,255,0.2)`;
+ctx.lineWidth = 2;
+ctx.stroke();
 
 // ================= TRAIL =================
 function updateTrail(name,x,y){
