@@ -28,6 +28,18 @@
       padding:12px 20px;background:#00ffff;
       border:none;border-radius:8px;cursor:pointer;
     }
+    #recBtn{
+      position:fixed;
+      bottom:70px;
+      left:50%;
+      transform:translateX(-50%);
+      padding:10px 18px;
+      background:red;
+      color:white;
+      border:none;
+      border-radius:8px;
+      cursor:pointer;
+    }
   </style>
 </head>
 
@@ -37,6 +49,7 @@
 <canvas id="canvas"></canvas>
 <div id="hud">Loading...</div>
 <button id="startBtn">START</button>
+<button id="recBtn">RECORD</button>
 
 <script>
 const video = document.getElementById('video');
@@ -44,6 +57,11 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const hud = document.getElementById('hud');
 const startBtn = document.getElementById('startBtn');
+const recBtn = document.getElementById('recBtn');
+
+let mediaRecorder;
+let recordedChunks = [];
+let isRecording = false;
 
 let particles = [];
 let trails = {};
@@ -290,8 +308,55 @@ window.addEventListener("keydown", e=>{
 
 startBtn.onclick = async ()=>{
   await audioCtx.resume();
+
+  document.body.requestFullscreen(); // 🔥 fullscreen
+
   startBtn.style.display="none";
+  recBtn.style.display="none"; // optional
+  hud.style.display="none";    // optional
+
   main();
+};
+
+  recBtn.onclick = ()=>{
+
+  if(!isRecording){
+
+    const stream = canvas.captureStream(30);
+
+    mediaRecorder = new MediaRecorder(stream, {
+      mimeType: "video/webm"
+    });
+
+    recordedChunks = [];
+
+    mediaRecorder.ondataavailable = e=>{
+      if(e.data.size > 0){
+        recordedChunks.push(e.data);
+      }
+    };
+
+    mediaRecorder.onstop = ()=>{
+      const blob = new Blob(recordedChunks, {type:"video/webm"});
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "garbha_record.webm";
+      a.click();
+    };
+
+    mediaRecorder.start();
+    recBtn.innerText = "STOP";
+    isRecording = true;
+
+  } else {
+
+    mediaRecorder.stop();
+    recBtn.innerText = "RECORD";
+    isRecording = false;
+
+  }
 };
 </script>
 
