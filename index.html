@@ -5,7 +5,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0"></script>
 
   <style>
     body{margin:0;overflow:hidden;background:black;}
@@ -45,7 +44,6 @@ const hud = document.getElementById('hud');
 let particles = [];
 let trails = {};
 let historyData = [];
-let faceLandmarks = [];
 
 // ================= CAMERA =================
 async function setupCamera(){
@@ -136,111 +134,57 @@ async function main(){
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
 
-  // 🔥 TAMBAHKAN DI SINI
-  const FACE_68_INDEX = [
-    10,338,297,332,284,251,389,356,454,323,
-    361,288,397,365,379,378,400,377,152,148,
-    176,149,150,136,172,58,132,93,234,127,
-    162,21,54,103,67,109,10,338,297,332,
-    284,251,389,356,454,323,361,288,397,365,
-    379,378,400,377,152,148,176,149,150,136,
-    172,58,132,93,234,127,162,21,54,103
-  ];
-
   const detector = await poseDetection.createDetector(
     poseDetection.SupportedModels.MoveNet,
     {modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING}
   );
 
- // ================= FACE LANDMARK (STABLE VERSION) =================
-const vision = await FilesetResolver.forVisionTasks(
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
-);
+  let lastFrame = {};
 
-const faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-  baseOptions: {
-    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
-  },
-  runningMode: "VIDEO",
-  numFaces: 1
-});
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(video,0,0);
 
-let lastFrame = {};
+    detector.estimatePoses(video).then(poses=>{
 
-function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+      poses.forEach(pose=>{
 
-  // tampilkan video
-  if(video.readyState >= 2 && video.videoWidth > 0){
-    ctx.drawImage(video,0,0,canvas.width,canvas.height);
-  }
+        let kp = {};
+        pose.keypoints.forEach(k=>kp[k.name]=k);
 
-  // ================= FACE DETECT =================
-  if(video.readyState >= 2){
-    const now = performance.now();
-    const result = faceLandmarker.detectForVideo(video, now);
+        Object.entries(kp).forEach(([name,k])=>{
 
-    if(result.faceLandmarks && result.faceLandmarks.length > 0){
-      faceLandmarks = result.faceLandmarks[0];
-    }
-  }
+          if(k.score>0.4){
 
-  // ================= FACE 68 POINT =================
-  if(faceLandmarks.length > 0){
-    ctx.fillStyle = "rgba(255,0,255,0.8)";
+            updateTrail(name,k.x,k.y);
+            addSmoke(k.x,k.y);
 
-    FACE_68_INDEX.forEach(i => {
-      const p = faceLandmarks[i];
-      if(p){
-        const x = p.x * canvas.width;
-        const y = p.y * canvas.height;
+            const speed = getSpeed(lastFrame[name],k);
 
-        ctx.beginPath();
-        ctx.arc(x, y, 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    });
-  }
+            if(speed>10){
+              playSound(speed/50);
+            }
 
-  // ================= POSE =================
-  detector.estimatePoses(video).then(poses=>{
-    poses.forEach(pose=>{
-      let kp = {};
-      pose.keypoints.forEach(k=>kp[k.name]=k);
-
-      Object.entries(kp).forEach(([name,k])=>{
-        if(k.score>0.4){
-          updateTrail(name,k.x,k.y);
-          addSmoke(k.x,k.y);
-
-          const speed = getSpeed(lastFrame[name],k);
-
-          if(speed>10){
-            playSound(speed/50);
+            lastFrame[name] = k;
           }
 
-          lastFrame[name] = k;
-        }
+        });
+
+        // SAVE JSON FRAME
+        historyData.push({
+          time: Date.now(),
+          keypoints: kp
+        });
+
       });
 
-      historyData.push({
-        time: Date.now(),
-        keypoints: kp
-      });
     });
-  });
 
-  drawTrail();
-  drawSmoke();
+    drawTrail();
+    drawSmoke();
 
-  requestAnimationFrame(draw);
-}
-
-draw();
+    requestAnimationFrame(draw);
   }
-
-  requestAnimationFrame(draw);
-}
 
   draw();
 }
