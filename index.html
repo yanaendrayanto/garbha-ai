@@ -9,7 +9,6 @@
 
   <style>
     body{margin:0;overflow:hidden;background:black;}
-
     video,canvas{
       position:absolute;
       width:100%;
@@ -17,30 +16,17 @@
       object-fit:contain;
       transform:scaleX(-1);
     }
-
     #hud{
-      position:fixed;
-      top:20px;
-      left:20px;
-      z-index:9999;
+      position:fixed;top:20px;left:20px;
       background:rgba(0,0,0,0.3);
-      padding:12px;
-      border-radius:10px;
-      color:#00ffff;
-      font-family:monospace;
+      padding:12px;border-radius:10px;
+      color:#00ffff;font-family:monospace;
     }
-
     #startBtn{
-      position:fixed;
-      bottom:20px;
-      left:50%;
+      position:fixed;bottom:20px;left:50%;
       transform:translateX(-50%);
-      padding:12px 20px;
-      background:#00ffff;
-      border:none;
-      border-radius:8px;
-      font-weight:bold;
-      cursor:pointer;
+      padding:12px 20px;background:#00ffff;
+      border:none;border-radius:8px;cursor:pointer;
     }
   </style>
 </head>
@@ -65,7 +51,6 @@ let lastFrame = {};
 let energy = 0;
 let mode = "ambient";
 
-// 🔥 LOCK SYSTEM
 let isProcessingPose = false;
 let isProcessingFace = false;
 
@@ -73,47 +58,28 @@ let faceMesh;
 let facePoints = [];
 let frameSkip = 0;
 
-// 🔥 FACE 68 MAP (WAJIB)
-const FACE_68 = [
-  10,338,297,332,284,251,389,356,
-  454,323,361,288,397,365,379,378,
-  400,377,152,148,176,149,150,136,
-  172,58,132,93,234,127,162,21,
-  33,7,163,144,145,153,154,155,
-  263,249,390,373,374,380,381,382,
-  1,2,98,327,168,197,
-  61,146,91,181,84,17,314,405,
-  321,375,291,308
-];
+// ================= FACE MAP =================
+const FACE_68 = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,
+400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,
+33,7,163,144,145,153,154,155,263,249,390,373,374,380,381,382,
+1,2,98,327,168,197,61,146,91,181,84,17,314,405,321,375,291,308];
 
 // ================= AUDIO =================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 function playSound(intensity){
-
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   const filter = audioCtx.createBiquadFilter();
 
   osc.type = "sine";
+  osc.frequency.value = 180 + intensity * 5;
 
-  const freq = 180 + intensity * 5;
-  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-
+  // mode-based filter (clean)
   filter.type = "lowpass";
-  filter.frequency.setValueAtTime(800, audioCtx.currentTime);
-
-   if(mode === "ambient"){
-  filter.frequency.value = 500;
-}
-
-if(mode === "spirit"){
-  filter.frequency.value = 800;
-}
-
-if(mode === "chaos"){
-  filter.frequency.value = 1200;
-}
+  filter.frequency.value =
+    mode === "ambient" ? 500 :
+    mode === "spirit" ? 800 : 1200;
 
   gain.gain.setValueAtTime(0, audioCtx.currentTime);
   gain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 0.02);
@@ -126,21 +92,15 @@ if(mode === "chaos"){
   osc.start();
   osc.stop(audioCtx.currentTime + 0.15);
 }
- 
 
 // ================= CAMERA =================
 async function setupCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
     video:{width:{ideal:1280},height:{ideal:720},facingMode:"user"}
   });
-
   video.srcObject = stream;
-
-  return new Promise(resolve=>{
-    video.onloadedmetadata = ()=>{
-      video.play();
-      resolve();
-    };
+  return new Promise(r=>video.onloadedmetadata=()=>{
+    video.play(); r();
   });
 }
 
@@ -157,19 +117,15 @@ function addSmoke(x,y){
 
 function drawSmoke(){
   particles.forEach(p=>{
-    ctx.globalAlpha = p.life;
-    ctx.fillStyle = "rgba(0,255,255,0.25)";
+    ctx.globalAlpha=p.life;
+    ctx.fillStyle="rgba(0,255,255,0.25)";
     ctx.beginPath();
     ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
     ctx.fill();
-
-    p.x += p.vx;
-    p.y += p.vy;
-    p.life -= 0.02;
+    p.x+=p.vx; p.y+=p.vy; p.life-=0.02;
   });
-
   particles = particles.filter(p=>p.life>0);
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha=1;
 }
 
 // ================= TRAIL =================
@@ -189,28 +145,25 @@ function drawTrail(){
 }
 
 // ================= SPEED =================
-function getSpeed(prev, curr){
-  if(!prev || !curr) return 0;
-  return Math.hypot(curr.x-prev.x, curr.y-prev.y);
+function getSpeed(prev,curr){
+  if(!prev||!curr) return 0;
+  return Math.hypot(curr.x-prev.x,curr.y-prev.y);
 }
 
-// ================= FACE FIX =================
+// ================= FACE =================
 function drawFace(){
-
-  if(!facePoints || facePoints.length === 0) return;
+  if(!facePoints.length) return;
 
   let maxPoints = energy > 15 ? 25 : 50;
 
-  FACE_68.slice(0, maxPoints).forEach(i=>{
+  FACE_68.slice(0,maxPoints).forEach(i=>{
     const p = facePoints[i];
     if(!p) return;
-
-    ctx.fillStyle = "rgba(255,0,200,0.8)";
+    ctx.fillStyle="rgba(255,0,200,0.8)";
     ctx.beginPath();
-    ctx.arc(p.x*canvas.width, p.y*canvas.height,2,0,Math.PI*2);
+    ctx.arc(p.x*canvas.width,p.y*canvas.height,2,0,Math.PI*2);
     ctx.fill();
   });
-
 }
 
 // ================= MAIN =================
@@ -227,19 +180,16 @@ async function main(){
   );
 
   faceMesh = new FaceMesh({
-    locateFile: (file)=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    locateFile:(f)=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
   });
 
-  faceMesh.setOptions({
-    maxNumFaces:1,
-    refineLandmarks:false
-  });
+  faceMesh.setOptions({maxNumFaces:1,refineLandmarks:false});
 
   faceMesh.onResults(res=>{
     if(res.multiFaceLandmarks.length){
       facePoints = res.multiFaceLandmarks[0];
     }
-    isProcessingFace = false;
+    isProcessingFace=false;
   });
 
   function draw(){
@@ -247,102 +197,59 @@ async function main(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(video,0,0);
 
-    // POSE LOCK
     if(!isProcessingPose){
-      isProcessingPose = true;
+      isProcessingPose=true;
 
       detector.estimatePoses(video).then(poses=>{
-
         poses.forEach(pose=>{
-          let total = 0;
-          let count = 0;
+          let total=0,count=0;
 
           pose.keypoints.forEach(k=>{
             if(k.score>0.4){
-
               updateTrail(k.name,k.x,k.y);
               addSmoke(k.x,k.y);
 
-              const speed = getSpeed(lastFrame[k.name],k);
-              total += speed;
-              count++;
+              const speed=getSpeed(lastFrame[k.name],k);
+              total+=speed; count++;
 
-              if(speed>12){
-                playSound(speed);
-              }
-
-              lastFrame[k.name] = k;
+              if(speed>12) playSound(speed);
+              lastFrame[k.name]=k;
             }
           });
 
-          energy = total / (count || 1);
+          energy = Math.min(40, total/(count||1)); // clamp
         });
 
-              if(energy < 8){
-        mode = "ambient";
-      }else if(energy < 20){
-        mode = "spirit";
-      }else{
-        mode = "chaos";
-      }
+        mode = energy<8?"ambient":energy<20?"spirit":"chaos";
 
-        isProcessingPose = false;
-
-      }).catch(()=> isProcessingPose=false);
+        isProcessingPose=false;
+      }).catch(()=>isProcessingPose=false);
     }
 
-    // FACE LOCK
     frameSkip++;
-    if(frameSkip % 6 === 0 && !isProcessingFace){
-      isProcessingFace = true;
-      faceMesh.send({image: video});
+    if(frameSkip%6===0 && !isProcessingFace){
+      isProcessingFace=true;
+      faceMesh.send({image:video});
     }
 
     drawTrail();
     drawSmoke();
 
-    // ================= GARBHA VISUAL =================
+    // ================= VISUAL =================
+    if(mode==="ambient"){
+      ctx.fillStyle="rgba(0,0,50,0.05)";
+    }else if(mode==="spirit"){
+      ctx.fillStyle="rgba(100,0,150,0.05)";
+      for(let i=0;i<2;i++) addSmoke(Math.random()*canvas.width,Math.random()*canvas.height);
+    }else{
+      ctx.fillStyle="rgba(255,100,0,0.08)";
+      for(let i=0;i<8;i++) addSmoke(Math.random()*canvas.width,Math.random()*canvas.height);
+    }
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
-// 🌑 AMBIENT (tenang)
-if(mode === "ambient"){
-  ctx.fillStyle = "rgba(0,0,50,0.05)";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-}
-
-// 🌌 SPIRIT (wajah aktif)
-if(mode === "spirit"){
-  ctx.fillStyle = "rgba(100,0,150,0.05)";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // partikel halus
-  for(let i=0;i<2;i++){
-    addSmoke(
-      Math.random()*canvas.width,
-      Math.random()*canvas.height
-    );
-  }
-}
-
-// 🔥 CHAOS (ledakan)
-if(mode === "chaos"){
-  ctx.fillStyle = "rgba(255,100,0,0.08)";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // partikel banyak
-  for(let i=0;i<10;i++){
-    addSmoke(
-      Math.random()*canvas.width,
-      Math.random()*canvas.height
-    );
-  }
-}
-    
     drawFace();
 
-    hud.innerHTML = `
-    MODE: ${mode.toUpperCase()} <br>
-    ENERGY: ${energy.toFixed(2)}
-    `;
+    hud.innerHTML = `MODE: ${mode}<br>ENERGY: ${energy.toFixed(2)}`;
 
     requestAnimationFrame(draw);
   }
@@ -352,7 +259,7 @@ if(mode === "chaos"){
 
 startBtn.onclick = async ()=>{
   await audioCtx.resume();
-  startBtn.style.display = "none";
+  startBtn.style.display="none";
   main();
 };
 </script>
