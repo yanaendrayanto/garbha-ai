@@ -112,6 +112,7 @@ function playSound(intensity){
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   const filter = audioCtx.createBiquadFilter();
+  const dest = audioCtx.createMediaStreamDestination();
 
   osc.type = "sine";
   osc.frequency.value = 180 + intensity * 5;
@@ -127,7 +128,8 @@ function playSound(intensity){
 
   osc.connect(filter);
   filter.connect(gain);
-  gain.connect(audioCtx.destination);
+  gain.connect(audioCtx.destination); // speaker
+  gain.connect(dest);                 // recorder
 
   osc.start();
   osc.stop(audioCtx.currentTime + 0.15);
@@ -355,9 +357,14 @@ startBtn.onclick = async ()=>{
 
   if(!isRecording){
 
-    const stream = canvas.captureStream(30);
+    const canvasStream = canvas.captureStream(30);
 
-    mediaRecorder = new MediaRecorder(stream, {
+    const combinedStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...dest.stream.getAudioTracks()
+    ]);
+
+    mediaRecorder = new MediaRecorder(combinedStream, {
       mimeType: "video/webm"
     });
 
