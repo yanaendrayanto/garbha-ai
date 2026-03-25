@@ -71,6 +71,9 @@ function playSound(intensity){
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   const filter = audioCtx.createBiquadFilter();
+  const scale = [220, 247, 262, 294, 330, 349, 392];
+  const freq = scale[Math.floor(intensity % scale.length)];
+  osc.frequency.value = freq;
 
   osc.type = "sine";
   osc.frequency.value = 180 + intensity * 5;
@@ -163,6 +166,7 @@ function drawFace(){
     ctx.beginPath();
     ctx.arc(p.x*canvas.width,p.y*canvas.height,2,0,Math.PI*2);
     ctx.fill();
+    ctx.fillStyle = `hsl(${energy*6},100%,60%)`;
   });
 }
 
@@ -195,6 +199,10 @@ async function main(){
   function draw(){
 
     ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = "black";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.globalAlpha = 1;
     ctx.drawImage(video,0,0);
 
     if(!isProcessingPose){
@@ -216,6 +224,18 @@ async function main(){
               lastFrame[k.name]=k;
             }
           });
+          const hand = pose.keypoints.find(k=>k.name==="right_wrist");
+  if(hand && hand.y < canvas.height * 0.3){
+    for(let i=0;i<6;i++){
+      addSmoke(
+        Math.random()*canvas.width,
+        Math.random()*canvas.height
+      );
+    }
+  }
+
+  energy = Math.min(40, total/(count||1));
+});
 
           energy = Math.min(40, total/(count||1)); // clamp
         });
@@ -256,7 +276,11 @@ async function main(){
 
   draw();
 }
-
+window.addEventListener("keydown", e=>{
+  if(e.key==="1") mode="ambient";
+  if(e.key==="2") mode="spirit";
+  if(e.key==="3") mode="chaos";
+});
 startBtn.onclick = async ()=>{
   await audioCtx.resume();
   startBtn.style.display="none";
