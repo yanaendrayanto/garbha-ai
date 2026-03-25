@@ -347,7 +347,9 @@ startBtn.onclick = async ()=>{
     };
 
     mediaRecorder.start();
-    recBtn.innerText = "STOP";
+    recBtn.innerText = "RECORD";
+    recBtn.style.background = "red";
+    recBtn.style.background = "black";
     isRecording = true;
 
   } else {
@@ -358,6 +360,16 @@ startBtn.onclick = async ()=>{
 
   }
 };
+  window.addEventListener("keydown", e=>{
+
+  // STOP RECORD pakai tombol S
+  if(e.key === "s" && isRecording){
+    mediaRecorder.stop();
+    isRecording = false;
+    console.log("RECORD STOPPED");
+  }
+
+});
 </script>
 
 </body>
