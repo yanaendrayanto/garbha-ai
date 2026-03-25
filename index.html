@@ -9,13 +9,15 @@
 
   <style>
     body{margin:0;overflow:hidden;background:black;}
+
     video,canvas{
       position:absolute;
       width:100%;
       height:100%;
-      object-fit:cover;
+      object-fit:contain; /* 🔥 FIX NO CROP */
       transform:scaleX(-1);
     }
+
     #hud{
       position:fixed;
       top:20px;
@@ -27,6 +29,19 @@
       color:#00ffff;
       font-family:monospace;
     }
+
+    #startBtn{
+      position:fixed;
+      bottom:20px;
+      left:50%;
+      transform:translateX(-50%);
+      padding:12px 20px;
+      background:#00ffff;
+      border:none;
+      border-radius:8px;
+      font-weight:bold;
+      cursor:pointer;
+    }
   </style>
 </head>
 
@@ -34,13 +49,16 @@
 
 <video id="video" autoplay playsinline muted></video>
 <canvas id="canvas"></canvas>
-<div id="hud"></div>
+<div id="hud">Loading...</div>
+
+<button id="startBtn">START</button>
 
 <script>
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const hud = document.getElementById('hud');
+const startBtn = document.getElementById('startBtn');
 
 let particles = [];
 let trails = {};
@@ -54,11 +72,19 @@ let faceMesh;
 let facePoints = [];
 let frameSkip = 0;
 
-// ================= CAMERA (ANTI HITAM) =================
+// AUDIO
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+// ================= CAMERA HD =================
 async function setupCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video:{width:640,height:480,facingMode:"user"} // lebih stabil
+    video:{
+      width:{ideal:1280},
+      height:{ideal:720},
+      facingMode:"user"
+    }
   });
+
   video.srcObject = stream;
 
   return new Promise(resolve=>{
@@ -70,25 +96,19 @@ async function setupCamera(){
 }
 
 // ================= AUDIO =================
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-// fix autoplay
-document.body.addEventListener('click', ()=>{
-  audioCtx.resume();
-});
-
 function playSound(intensity){
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
 
-  osc.frequency.value = 150 + energy * 10;
-  gain.gain.value = Math.min(0.15, energy/200);
+  osc.type = "sine";
+  osc.frequency.value = 200 + energy * 8;
+  gain.gain.value = Math.min(0.2, energy/150);
 
   osc.connect(gain);
   gain.connect(audioCtx.destination);
 
   osc.start();
-  osc.stop(audioCtx.currentTime + 0.05);
+  osc.stop(audioCtx.currentTime + 0.08);
 }
 
 // ================= PARTICLE =================
@@ -141,7 +161,7 @@ function getSpeed(prev, curr){
   return Math.hypot(curr.x-prev.x, curr.y-prev.y);
 }
 
-// ================= FACE DRAW =================
+// ================= FACE =================
 function drawFace(){
   facePoints.forEach(p=>{
     ctx.fillStyle = "rgba(255,0,200,0.5)";
@@ -151,6 +171,7 @@ function drawFace(){
 
 // ================= MAIN =================
 async function main(){
+
   await setupCamera();
 
   canvas.width = video.videoWidth;
@@ -161,11 +182,8 @@ async function main(){
     {modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING}
   );
 
-  // FACE INIT (ANTI FREEZE)
   faceMesh = new FaceMesh({
-    locateFile: (file)=>{
-      return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-    }
+    locateFile: (file)=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
   });
 
   faceMesh.setOptions({
@@ -184,23 +202,21 @@ async function main(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(video,0,0);
 
-    // ================= POSE =================
     detector.estimatePoses(video).then(poses=>{
 
       poses.forEach(pose=>{
 
-        let totalSpeed = 0;
+        let total = 0;
         let count = 0;
 
         pose.keypoints.forEach(k=>{
-
           if(k.score>0.4){
 
             updateTrail(k.name,k.x,k.y);
             addSmoke(k.x,k.y);
 
             const speed = getSpeed(lastFrame[k.name],k);
-            totalSpeed += speed;
+            total += speed;
             count++;
 
             if(speed>12){
@@ -211,18 +227,12 @@ async function main(){
           }
         });
 
-        energy = totalSpeed / (count || 1);
-
-        historyData.push({
-          time: Date.now(),
-          energy: energy
-        });
-
+        energy = total / (count || 1);
       });
 
     });
 
-    // ================= FACE (THROTTLE) =================
+    // FACE throttle
     frameSkip++;
     if(frameSkip % 3 === 0){
       faceMesh.send({image: video});
@@ -232,11 +242,7 @@ async function main(){
     drawSmoke();
     drawFace();
 
-    // HUD
-    hud.innerHTML = `
-      ENERGY: ${energy.toFixed(2)}<br>
-      PARTICLES: ${particles.length}
-    `;
+    hud.innerHTML = "ENERGY: " + energy.toFixed(2);
 
     requestAnimationFrame(draw);
   }
@@ -244,18 +250,12 @@ async function main(){
   draw();
 }
 
-main();
-
-// ================= EXPORT =================
-window.addEventListener('keydown', e=>{
-  if(e.key === 's'){
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(historyData));
-    const dl = document.createElement('a');
-    dl.setAttribute("href", dataStr);
-    dl.setAttribute("download", "dance_data.json");
-    dl.click();
-  }
-});
+// ================= START BUTTON =================
+startBtn.onclick = async ()=>{
+  await audioCtx.resume(); // 🔥 audio hidup
+  startBtn.style.display = "none";
+  main();
+};
 </script>
 
 </body>
