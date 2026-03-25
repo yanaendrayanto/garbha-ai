@@ -5,6 +5,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 
   <style>
     body{margin:0;overflow:hidden;background:black;}
@@ -44,6 +45,7 @@ const hud = document.getElementById('hud');
 let particles = [];
 let trails = {};
 let historyData = [];
+let faceLandmarks = [];
 
 // ================= CAMERA =================
 async function setupCamera(){
@@ -138,6 +140,24 @@ async function main(){
     poseDetection.SupportedModels.MoveNet,
     {modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING}
   );
+
+  // ================= FACE MESH =================
+const faceMesh = new FaceMesh({
+  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+});
+
+faceMesh.setOptions({
+  maxNumFaces: 1,
+  refineLandmarks: true,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
+
+faceMesh.onResults(results => {
+  if(results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0){
+    faceLandmarks = results.multiFaceLandmarks[0];
+  }
+});
 
   let lastFrame = {};
 
