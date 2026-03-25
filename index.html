@@ -14,7 +14,7 @@
       position:absolute;
       width:100%;
       height:100%;
-      object-fit:contain; /* 🔥 FIX NO CROP */
+      object-fit:contain;
       transform:scaleX(-1);
     }
 
@@ -50,7 +50,6 @@
 <video id="video" autoplay playsinline muted></video>
 <canvas id="canvas"></canvas>
 <div id="hud">Loading...</div>
-
 <button id="startBtn">START</button>
 
 <script>
@@ -62,20 +61,46 @@ const startBtn = document.getElementById('startBtn');
 
 let particles = [];
 let trails = {};
-let historyData = [];
-
 let lastFrame = {};
 let energy = 0;
 
-// FACE
+// ================= FACE =================
 let faceMesh;
 let facePoints = [];
 let frameSkip = 0;
 
-// AUDIO
+// 🔥 68 LANDMARK MAPPING
+const FACE_68 = [
+  10,338,297,332,284,251,389,356,
+  454,323,361,288,397,365,379,378,
+  400,377,152,148,176,149,150,136,
+  172,58,132,93,234,127,162,21,
+  33,7,163,144,145,153,154,155,
+  263,249,390,373,374,380,381,382,
+  1,2,98,327,168,197,
+  61,146,91,181,84,17,314,405,
+  321,375,291,308
+];
+
+// ================= AUDIO =================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-// ================= CAMERA HD =================
+function playSound(intensity){
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = "sine";
+  osc.frequency.value = 200 + energy * 8;
+  gain.gain.value = Math.min(0.2, energy/150);
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.08);
+}
+
+// ================= CAMERA =================
 async function setupCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
     video:{
@@ -93,22 +118,6 @@ async function setupCamera(){
       resolve();
     };
   });
-}
-
-// ================= AUDIO =================
-function playSound(intensity){
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-
-  osc.type = "sine";
-  osc.frequency.value = 200 + energy * 8;
-  gain.gain.value = Math.min(0.2, energy/150);
-
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-
-  osc.start();
-  osc.stop(audioCtx.currentTime + 0.08);
 }
 
 // ================= PARTICLE =================
@@ -161,12 +170,24 @@ function getSpeed(prev, curr){
   return Math.hypot(curr.x-prev.x, curr.y-prev.y);
 }
 
-// ================= FACE =================
+// ================= 🔥 FACE 68 DRAW =================
 function drawFace(){
-  facePoints.forEach(p=>{
-    ctx.fillStyle = "rgba(255,0,200,0.5)";
-    ctx.fillRect(p.x*canvas.width, p.y*canvas.height, 2,2);
+
+  if(!facePoints || facePoints.length === 0) return;
+
+  FACE_68.forEach(i=>{
+    const p = facePoints[i];
+    if(!p) return;
+
+    const x = p.x * canvas.width;
+    const y = p.y * canvas.height;
+
+    ctx.fillStyle = `hsl(${energy*5},100%,60%)`;
+    ctx.beginPath();
+    ctx.arc(x,y,2,0,Math.PI*2);
+    ctx.fill();
   });
+
 }
 
 // ================= MAIN =================
@@ -232,7 +253,7 @@ async function main(){
 
     });
 
-    // FACE throttle
+    // FACE (anti freeze)
     frameSkip++;
     if(frameSkip % 3 === 0){
       faceMesh.send({image: video});
@@ -250,9 +271,9 @@ async function main(){
   draw();
 }
 
-// ================= START BUTTON =================
+// ================= START =================
 startBtn.onclick = async ()=>{
-  await audioCtx.resume(); // 🔥 audio hidup
+  await audioCtx.resume();
   startBtn.style.display = "none";
   main();
 };
