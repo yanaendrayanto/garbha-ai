@@ -64,7 +64,7 @@ let trails = {};
 let lastFrame = {};
 let energy = 0;
 
-// 🔥 LOCK SYSTEM (ANTI FREEZE)
+// 🔥 LOCK SYSTEM
 let isProcessingPose = false;
 let isProcessingFace = false;
 
@@ -72,7 +72,20 @@ let faceMesh;
 let facePoints = [];
 let frameSkip = 0;
 
-// ================= AUDIO (SMOOTH FIX) =================
+// 🔥 FACE 68 MAP (WAJIB)
+const FACE_68 = [
+  10,338,297,332,284,251,389,356,
+  454,323,361,288,397,365,379,378,
+  400,377,152,148,176,149,150,136,
+  172,58,132,93,234,127,162,21,
+  33,7,163,144,145,153,154,155,
+  263,249,390,373,374,380,381,382,
+  1,2,98,327,168,197,
+  61,146,91,181,84,17,314,405,
+  321,375,291,308
+];
+
+// ================= AUDIO =================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 function playSound(intensity){
@@ -104,11 +117,7 @@ function playSound(intensity){
 // ================= CAMERA =================
 async function setupCamera(){
   const stream = await navigator.mediaDevices.getUserMedia({
-    video:{
-      width:{ideal:1280},
-      height:{ideal:720},
-      facingMode:"user"
-    }
+    video:{width:{ideal:1280},height:{ideal:720},facingMode:"user"}
   });
 
   video.srcObject = stream;
@@ -171,18 +180,23 @@ function getSpeed(prev, curr){
   return Math.hypot(curr.x-prev.x, curr.y-prev.y);
 }
 
-// ================= FACE =================
+// ================= FACE FIX =================
 function drawFace(){
+
   if(!facePoints || facePoints.length === 0) return;
 
-  for(let i=0;i<40;i++){
-    const p = facePoints[i];
-    if(!p) continue;
+  let maxPoints = energy > 15 ? 25 : 50;
 
+  FACE_68.slice(0, maxPoints).forEach(i=>{
+    const p = facePoints[i];
+    if(!p) return;
+
+    ctx.fillStyle = "rgba(255,0,200,0.8)";
     ctx.beginPath();
-    ctx.arc(p.x*canvas.width,p.y*canvas.height,2,0,Math.PI*2);
+    ctx.arc(p.x*canvas.width, p.y*canvas.height,2,0,Math.PI*2);
     ctx.fill();
-  }
+  });
+
 }
 
 // ================= MAIN =================
@@ -219,9 +233,8 @@ async function main(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(video,0,0);
 
-    // ================= POSE LOCK =================
+    // POSE LOCK
     if(!isProcessingPose){
-
       isProcessingPose = true;
 
       detector.estimatePoses(video).then(poses=>{
@@ -253,14 +266,11 @@ async function main(){
 
         isProcessingPose = false;
 
-      }).catch(()=>{
-        isProcessingPose = false;
-      });
+      }).catch(()=> isProcessingPose=false);
     }
 
-    // ================= FACE LOCK =================
+    // FACE LOCK
     frameSkip++;
-
     if(frameSkip % 6 === 0 && !isProcessingFace){
       isProcessingFace = true;
       faceMesh.send({image: video});
@@ -278,7 +288,6 @@ async function main(){
   draw();
 }
 
-// ================= START =================
 startBtn.onclick = async ()=>{
   await audioCtx.resume();
   startBtn.style.display = "none";
