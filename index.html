@@ -8,62 +8,20 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 
   <style>
-    body{
-  margin:0;
-  overflow:hidden;
-  background:black;
-}
-
-video, canvas{
-  position:absolute;
-  width:100%;
-  height:100%;
-  object-fit:contain;
-}
-
-video{
-  transform:scaleX(-1); /* mirror */
-}
-
-canvas{
-  transform:none; /* normal */
-}
-
-#hud{
-  position:fixed;
-  top:20px;
-  left:20px;
-  background:rgba(0,0,0,0.3);
-  padding:12px;
-  border-radius:10px;
-  color:#00ffff;
-  font-family:monospace;
-}
-
-#startBtn{
-  position:fixed;
-  bottom:20px;
-  left:50%;
-  transform:translateX(-50%);
-  padding:12px 20px;
-  background:#00ffff;
-  border:none;
-  border-radius:8px;
-  cursor:pointer;
-}
-
-#recBtn{
-  position:fixed;
-  bottom:70px;
-  left:50%;
-  transform:translateX(-50%);
-  padding:10px 18px;
-  background:red;
-  color:white;
-  border:none;
-  border-radius:8px;
-  cursor:pointer;
-}
+    body{ margin:0; overflow:hidden; background:black; }
+    video, canvas{ position:absolute; width:100%; height:100%; object-fit:contain; }
+    video{ transform:scaleX(-1); }
+    #hud{
+      position:fixed; top:20px; left:20px;
+      background:rgba(0,0,0,0.3); padding:12px;
+      border-radius:10px; color:#00ffff; font-family:monospace;
+    }
+    #startBtn{
+      position:fixed; bottom:20px; left:50%;
+      transform:translateX(-50%);
+      padding:12px 20px; background:#00ffff;
+      border:none; border-radius:8px; cursor:pointer;
+    }
   </style>
 </head>
 
@@ -73,7 +31,6 @@ canvas{
 <canvas id="canvas"></canvas>
 <div id="hud">Loading...</div>
 <button id="startBtn">START</button>
-<button id="recBtn">RECORD</button>
 
 <script>
 const video = document.getElementById('video');
@@ -81,61 +38,42 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const hud = document.getElementById('hud');
 const startBtn = document.getElementById('startBtn');
-const recBtn = document.getElementById('recBtn');
-
-let mediaRecorder;
-let recordedChunks = [];
-let isRecording = false;
 
 let particles = [];
-let trails = {};
 let lastFrame = {};
 let energy = 0;
 let mode = "ambient";
-
-let isProcessingPose = false;
-let isProcessingFace = false;
 
 let faceMesh;
 let facePoints = [];
 let frameSkip = 0;
 
+// ================= WORD SYSTEM =================
 const WORDS = [
   "memory","trace","body","echo","habit","attention",
   "archive","signal","ghost","loop","breath","energy",
   "presence","absence","flow","fragment","repetition"
 ];
 
-const FACE_68 = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,
-400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,
-33,7,163,144,145,153,154,155,263,249,390,373,374,380,381,382,
-1,2,98,327,168,197,61,146,91,181,84,17,314,405,321,375,291,308];
+// 🔥 MEMORY BESAR (ARSIP)
+let memoryWords = [];
+let lastWordTime = 0;
 
 // ================= AUDIO =================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-const dest = audioCtx.createMediaStreamDestination(); // 🔥 GLOBAL
 
 function playSound(intensity){
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  const filter = audioCtx.createBiquadFilter();
 
-  osc.type = "sine";
   osc.frequency.value = 180 + intensity * 5;
-
-  filter.type = "lowpass";
-  filter.frequency.value =
-    mode === "ambient" ? 500 :
-    mode === "spirit" ? 800 : 1200;
 
   gain.gain.setValueAtTime(0, audioCtx.currentTime);
   gain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 0.02);
   gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
 
-  osc.connect(filter);
-  filter.connect(gain);
-  gain.connect(audioCtx.destination); // speaker
-  gain.connect(dest);                 // recorder
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
 
   osc.start();
   osc.stop(audioCtx.currentTime + 0.15);
@@ -147,35 +85,39 @@ async function setupCamera(){
     video:{width:{ideal:1280},height:{ideal:720},facingMode:"user"}
   });
   video.srcObject = stream;
-  return new Promise(r=>video.onloadedmetadata=()=>{
-    video.play(); r();
-  });
+  return new Promise(r=>video.onloadedmetadata=()=>{ video.play(); r(); });
 }
 
-// ================= PARTICLE =================
-function addSmoke(x,y){
-  particles.push({
-    y: y,
-    vx: (Math.random()-0.5)*0.5,
-    vy: -Math.random()*1.5 - 0.5,
-    text: word,
-    size: 14 + energy * 0.3,
-    life: 1
-  });
+// ================= WORD PARTICLE =================
+function addWord(x, y){
+
+  const word = WORDS[Math.floor(Math.random()*WORDS.length)];
+
+  // 🔥 SIMPAN KE MEMORY TANPA BATAS
+  if(Date.now() - lastWordTime > 150){
+    memoryWords.push(word);
+    lastWordTime = Date.now();
+  }
+
+  if(particles.length < 300){
+    particles.push({
+      x, y,
+      vx:(Math.random()-0.5)*0.5,
+      vy:-Math.random()*1.5 - 0.5,
+      text: word,
+      size: 10 + energy * 0.8 + Math.random()*10,
+      life: 1
+    });
+  }
 }
 
 function drawWords(){
   particles.forEach(p=>{
     ctx.globalAlpha = p.life;
-
-    ctx.fillStyle = `hsl(${energy*6},100%,70%)`;
+    ctx.fillStyle = `hsl(${(energy*10 + p.x*0.05)%360},100%,70%)`;
     ctx.font = `${p.size}px monospace`;
 
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.vx * 0.5);
-    ctx.fillText(p.text, 0, 0);
-    ctx.restore();
+    ctx.fillText(p.text, p.x, p.y);
 
     p.x += p.vx;
     p.y += p.vy;
@@ -183,49 +125,13 @@ function drawWords(){
   });
 
   particles = particles.filter(p=>p.life > 0);
-
   ctx.globalAlpha = 1;
-}
-
-// ================= TRAIL =================
-function updateTrail(name,x,y){
-  if(!trails[name]) trails[name]=[];
-  trails[name].push({x,y});
-  if(trails[name].length>15) trails[name].shift();
-}
-
-function drawTrail(){
-  Object.values(trails).forEach(points=>{
-    ctx.beginPath();
-    points.forEach(p=>ctx.lineTo(p.x,p.y));
-    ctx.strokeStyle="rgba(0,255,255,0.3)";
-    ctx.stroke();
-  });
 }
 
 // ================= SPEED =================
 function getSpeed(prev,curr){
   if(!prev||!curr) return 0;
   return Math.hypot(curr.x-prev.x,curr.y-prev.y);
-}
-
-// ================= FACE =================
-function drawFace(){
-  if(!facePoints.length) return;
-
-  let maxPoints = energy > 15 ? 25 : 50;
-
-  FACE_68.slice(0,maxPoints).forEach(i=>{
-    const p = facePoints[i];
-    if(!p) return;
-    ctx.fillStyle = `hsl(${energy*6},100%,60%)`;
-    ctx.beginPath();
-    let x = (1 - p.x) * canvas.width;
-    let y = p.y * canvas.height;
-    
-    ctx.arc(x, y, 2, 0, Math.PI*2);
-    ctx.fill();
-  });
 }
 
 // ================= MAIN =================
@@ -241,19 +147,6 @@ async function main(){
     {modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING}
   );
 
-  faceMesh = new FaceMesh({
-    locateFile:(f)=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
-  });
-
-  faceMesh.setOptions({maxNumFaces:1,refineLandmarks:false});
-
-  faceMesh.onResults(res=>{
-    if(res.multiFaceLandmarks.length){
-      facePoints = res.multiFaceLandmarks[0];
-    }
-    isProcessingFace=false;
-  });
-
   function draw(){
 
     ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -262,89 +155,53 @@ async function main(){
     ctx.fillStyle = "black";
     ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.globalAlpha = 1;
+
     ctx.save();
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+    ctx.scale(-1,1);
+    ctx.drawImage(video,-canvas.width,0,canvas.width,canvas.height);
     ctx.restore();
 
-    // POSE
-    if(!isProcessingPose){
-      isProcessingPose=true;
+    detector.estimatePoses(video).then(poses=>{
+      poses.forEach(pose=>{
+        let total=0, count=0;
 
-      detector.estimatePoses(video).then(poses=>{
+        pose.keypoints.forEach(k=>{
+          if(k.score>0.4){
+            let x = canvas.width - k.x;
+            let y = k.y;
 
-        poses.forEach(pose=>{
-          let total=0;
-          let count=0;
+            addWord(x,y);
 
-          pose.keypoints.forEach(k=>{
-            if(k.score>0.4){
-              let x = canvas.width - k.x;
-              let y = k.y;
-              
-             
-              addWord(x, y);
-              
-              const speed = getSpeed(lastFrame[k.name], {x:x, y:y});
-              total += speed;
-              count++;
-              
-              if(speed>12) playSound(speed);
-              
-              lastFrame[k.name] = {x:x, y:y};
-            }
-          });
+            const speed = getSpeed(lastFrame[k.name], {x,y});
+            total += speed;
+            count++;
 
-          const hand = pose.keypoints.find(k=>k.name==="right_wrist");
-          if(hand && hand.y < canvas.height * 0.3){
-            for(let i=0;i<6;i++){
-              addWord(Math.random()*canvas.width,Math.random()*canvas.height);
-            }
+            if(speed>12) playSound(speed);
+
+            lastFrame[k.name] = {x,y};
           }
-
-          energy = Math.min(40, total/(count||1));
         });
 
-        mode = energy<8?"ambient":energy<20?"spirit":"chaos";
+        energy = Math.min(40, total/(count||1));
+      });
+    });
 
-        isProcessingPose=false;
-
-      }).catch(()=>isProcessingPose=false);
-    }
-
-    // FACE
-    frameSkip++;
-    if(frameSkip%6===0 && !isProcessingFace){
-      isProcessingFace=true;
-      faceMesh.send({image:video});
-    }
-
- 
     drawWords();
 
-    // CINEMATIC LIGHT
-    let gradient = ctx.createRadialGradient(
-      canvas.width/2,canvas.height/2,50,
-      canvas.width/2,canvas.height/2,canvas.width/1.2
-    );
+    // 🔥 MEMORY TEXT DISPLAY (ARSIP PANJANG)
+    ctx.fillStyle = "white";
+    ctx.font = "18px monospace";
+    ctx.textAlign = "left";
 
-    if(mode==="ambient"){
-      gradient.addColorStop(0,"rgba(0,50,100,0.2)");
-      gradient.addColorStop(1,"rgba(0,0,0,0.9)");
-    }else if(mode==="spirit"){
-      gradient.addColorStop(0,"rgba(150,0,255,0.25)");
-      gradient.addColorStop(1,"rgba(0,0,0,0.9)");
-    }else{
-      gradient.addColorStop(0,"rgba(255,100,0,0.3)");
-      gradient.addColorStop(1,"rgba(0,0,0,0.95)");
+    const maxLines = 10;
+    const wordsPerLine = 8;
+
+    for(let i=0;i<maxLines;i++){
+      let slice = memoryWords.slice(-wordsPerLine*(i+1), -wordsPerLine*i || undefined);
+      ctx.fillText(slice.join(" "), 20, canvas.height - 20 - (i*20));
     }
 
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-
-    drawFace();
-
-    hud.innerHTML = `MODE: ${mode}<br>ENERGY: ${energy.toFixed(2)}`;
+    hud.innerHTML = `ENERGY: ${energy.toFixed(2)}<br>WORDS: ${memoryWords.length}`;
 
     requestAnimationFrame(draw);
   }
@@ -352,83 +209,13 @@ async function main(){
   draw();
 }
 
-window.addEventListener("keydown", e=>{
-  if(e.key==="1") mode="ambient";
-  if(e.key==="2") mode="spirit";
-  if(e.key==="3") mode="chaos";
-});
-
 startBtn.onclick = async ()=>{
   await audioCtx.resume();
-
-  document.body.requestFullscreen(); // 🔥 fullscreen
-
+  document.body.requestFullscreen();
   startBtn.style.display="none";
-  recBtn.style.display="none"; // optional
-  hud.style.display="none";    // optional
-
+  hud.style.display="none";
   main();
 };
-
-  recBtn.onclick = ()=>{
-
-  if(!isRecording){
-
-    const canvasStream = canvas.captureStream(30);
-
-    const combinedStream = new MediaStream([
-      ...canvasStream.getVideoTracks(),
-      ...dest.stream.getAudioTracks()
-    ]);
-
-    mediaRecorder = new MediaRecorder(combinedStream, {
-      mimeType: "video/webm"
-    });
-
-    recordedChunks = [];
-
-    mediaRecorder.ondataavailable = e=>{
-      if(e.data.size > 0){
-        recordedChunks.push(e.data);
-      }
-    };
-
-    mediaRecorder.onstop = ()=>{
-      const blob = new Blob(recordedChunks, {type:"video/webm"});
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "garbha_record.webm";
-      a.click();
-    };
-
-    // START RECORD
-    mediaRecorder.start();
-    recBtn.innerText = "STOP";
-    recBtn.style.background = "black";
-    isRecording = true;
-
-  } else {
-
-    // STOP RECORD
-    mediaRecorder.stop();
-    recBtn.innerText = "RECORD";
-    recBtn.style.background = "red";
-    isRecording = false;
-
-  }
-};
-  window.addEventListener("keydown", e=>{
-
-  // STOP RECORD pakai tombol S
-  if(e.key === "s" && isRecording){
-    mediaRecorder.stop();
-    isRecording = false;
-    console.log("RECORD STOPPED");
-  }
-
-});
 </script>
 
 </body>
