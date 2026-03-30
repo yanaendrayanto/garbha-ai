@@ -5,7 +5,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 
   <style>
     body{ margin:0; overflow:hidden; background:black; }
@@ -42,22 +41,35 @@ const startBtn = document.getElementById('startBtn');
 let particles = [];
 let lastFrame = {};
 let energy = 0;
-let mode = "ambient";
 
-let faceMesh;
-let facePoints = [];
-let frameSkip = 0;
-
-// ================= WORD SYSTEM =================
-const WORDS = [
-  "memory","trace","body","echo","habit","attention",
-  "archive","signal","ghost","loop","breath","energy",
-  "presence","absence","flow","fragment","repetition"
-];
-
-// 🔥 MEMORY BESAR (ARSIP)
 let memoryWords = [];
 let lastWordTime = 0;
+
+// ================= NARASI GARBHA =================
+const WORDS = [
+  // RAHIM
+  "rahim","gelap","sunyi","hangat","cair","denyut","terbungkus","awal","benih",
+
+  // LAHIR
+  "lahir","napas","tangis","cahaya","terbuka","getar","dunia","pertama",
+
+  // BAYI
+  "peluk","ibu","diam","lembut","dekat","rasa","bergantung",
+
+  // ANAK
+  "langkah","jatuh","bangun","main","tanya","lihat","belajar","ingin",
+
+  // REMAJA
+  "gelisah","cari","arah","ragu","berubah","melawan","ingin tahu",
+
+  // DEWASA
+  "pilih","jalan","tanggung","beban","cinta","kehilangan","makna","hidup",
+
+  // REFLEKSI
+  "ingat","ulang","jejak","waktu","arsip","tubuh","kesadaran"
+];
+
+let lifeIndex = 0;
 
 // ================= AUDIO =================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -88,13 +100,21 @@ async function setupCamera(){
   return new Promise(r=>video.onloadedmetadata=()=>{ video.play(); r(); });
 }
 
-// ================= WORD PARTICLE =================
+// ================= WORD SYSTEM =================
 function addWord(x, y){
 
-  const word = WORDS[Math.floor(Math.random()*WORDS.length)];
+  const word = WORDS[lifeIndex];
 
-  // 🔥 SIMPAN KE MEMORY TANPA BATAS
-  if(Date.now() - lastWordTime > 150){
+  // 🔥 NARASI BERJALAN SESUAI GERAK
+  if(Math.random() < 0.1 + energy*0.02){
+    lifeIndex++;
+    if(lifeIndex >= WORDS.length){
+      lifeIndex = WORDS.length - 1;
+    }
+  }
+
+  // 🔥 MEMORY TANPA BATAS
+  if(Date.now() - lastWordTime > 120){
     memoryWords.push(word);
     lastWordTime = Date.now();
   }
@@ -116,7 +136,6 @@ function drawWords(){
     ctx.globalAlpha = p.life;
     ctx.fillStyle = `hsl(${(energy*10 + p.x*0.05)%360},100%,70%)`;
     ctx.font = `${p.size}px monospace`;
-
     ctx.fillText(p.text, p.x, p.y);
 
     p.x += p.vx;
@@ -188,20 +207,20 @@ async function main(){
 
     drawWords();
 
-    // 🔥 MEMORY TEXT DISPLAY (ARSIP PANJANG)
+    // 🔥 MEMORY VISUAL (ARSIP HIDUP)
     ctx.fillStyle = "white";
-    ctx.font = "18px monospace";
+    ctx.font = "16px monospace";
     ctx.textAlign = "left";
 
-    const maxLines = 10;
-    const wordsPerLine = 8;
+    const maxLines = 15;
+    const wordsPerLine = 10;
 
     for(let i=0;i<maxLines;i++){
       let slice = memoryWords.slice(-wordsPerLine*(i+1), -wordsPerLine*i || undefined);
-      ctx.fillText(slice.join(" "), 20, canvas.height - 20 - (i*20));
+      ctx.fillText(slice.join(" "), 20, canvas.height - 20 - (i*18));
     }
 
-    hud.innerHTML = `ENERGY: ${energy.toFixed(2)}<br>WORDS: ${memoryWords.length}`;
+    hud.innerHTML = `ENERGI: ${energy.toFixed(2)}<br>ARSIP: ${memoryWords.length}`;
 
     requestAnimationFrame(draw);
   }
